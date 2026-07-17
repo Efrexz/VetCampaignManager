@@ -1,0 +1,90 @@
+@import 'tailwindcss';
+
+/*
+  VetCampaignManager design tokens
+  Palette: cream surfaces, warm ink, vegetal teal primary, clay action accent.
+  Derived per the design brief: terracotta used ONLY as a verb accent (the Send
+  action), never as a default. No display serif — personality comes from spacing
+  and the WhatsApp preview panel.
+*/
+
+@theme {
+  /* Color */
+  --color-cream: #f8f6f1;
+  --color-paper: #ffffff;
+  --color-ink: #1a1a17;
+  --color-ink-soft: #4a4a44;
+  --color-ink-mute: #8a8a82;
+  --color-vegetal: #1f6f5f;
+  --color-vegetal-soft: #e7f0ee;
+  --color-clay: #c9693d;
+  --color-clay-soft: #f7ece5;
+  --color-mist: #e8e4dc;
+  --color-mist-soft: #f1eee8;
+  --color-danger: #b54545;
+  --color-danger-soft: #f6e6e6;
+  --color-warn: #b88a2e;
+  --color-warn-soft: #f6efe0;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Type scale (px) */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+
+  /* Font families — single UI grotesk + mono for data */
+  --font-sans: 'Inter Tight', 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  /* Shadow — single subtle elevation */
+  --shadow-card: 0 1px 2px rgba(26, 26, 23, 0.04),
+    0 4px 16px rgba(26, 26, 23, 0.06);
+
+  /* Track sizes */
+  --spacing-sidebar: 16rem;
+  --spacing-topbar: 3.5rem;
+}
+
+/* Base */
+html {
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background-color: var(--color-cream);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+body {
+  margin: 0;
+}
+
+/* Tabular figures for tables & counts */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reduced motion honored globally */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Visible keyboard focus */
+:focus-visible {
+  outline: 2px solid var(--color-vegetal);
+  outline-offset: 2px;
+}
