@@ -28,3 +28,6 @@ dist-ssr
 
 # Vite
 .vite
+
+# Sample Excel files (kept local only — may contain real client data)
+samples/

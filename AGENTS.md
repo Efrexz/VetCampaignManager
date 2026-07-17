@@ -69,8 +69,28 @@ src/
 
 ## Phase status
 - [x] Phase 0 — Foundations (scaffold, tokens, UI kit, shell, placeholder pages)
-- [ ] Phase 1 — Excel Import (parse → validate → summary screen)
+- [x] Phase 1 — Excel Import (parse → validate → summary screen)
 - [ ] Phase 2 — Settings: Categories & Templates
 - [ ] Phase 3 — Campaign Preview & Message Preview
 - [ ] Phase 4 — Send Campaign & n8n
 - [ ] Phase 5 — Polish (empty/error states, keyboard, focus, reduced-motion, mobile)
+
+## VetPraxis Excel format (real, observed)
+- Sheet name: `Worksheet` (single)
+- Columns: `CLIENTE | MASCOTA | TELÉFONOS | MOTIVO | TIPO DE EVENTO | ESTADO`
+- MVP uses:   CLIENTE→owner, MASCOTA→pet (strip trailing `#`), TELÉFONOS→phone, TIPO DE EVENTO→category
+- Ignored in MVP: MOTIVO (sub-reason), ESTADO (always PENDIENTE)
+- TELÉFONOS can contain several numbers separated by ` - ` with optional
+  annotations like `(DUEÑA)` or `(FIJO)`. Algorithm: pick the FIRST valid
+  Peru mobile (9 digits, starts with 9), prefix `+51`. Fixed lines (8 digits)
+  and other formats are skipped. The `(DUEÑA)` tag is NOT preferred.
+
+## Verification script (optional, dev-only)
+`scripts/verify-phase1.mts` runs ad-hoc assertions against the real sample
+Excel and a synthetic edge-case workbook. Run via esbuild:
+```bash
+node_modules/.bin/esbuild scripts/verify-phase1.mts --bundle --platform=node \
+  --format=esm --outfile=node_modules/.cache/verify-phase1.mjs \
+  && node node_modules/.cache/verify-phase1.mjs
+```
+`samples/` holds real `.xlsx` files and is gitignored (may contain PII).
