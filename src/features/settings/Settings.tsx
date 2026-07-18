@@ -1,14 +1,40 @@
-import { EmptyState } from '@/shared/components/ui'
-import { Settings as SettingsIcon } from 'lucide-react'
+import { useState } from 'react'
+import { Tags, MessageSquare, Webhook } from 'lucide-react'
+import { Tabs } from '@/shared/components/ui'
+import { CategoriesTab } from './CategoriesTab'
+import { TemplatesTab } from './TemplatesTab'
+import { WebhookTab } from './WebhookTab'
+
+type TabId = 'categories' | 'templates' | 'webhook'
+
+const tabs = [
+  { id: 'categories', label: 'Categorías', icon: <Tags size={14} /> },
+  { id: 'templates', label: 'Plantillas', icon: <MessageSquare size={14} /> },
+  { id: 'webhook', label: 'Webhook', icon: <Webhook size={14} /> },
+]
 
 export function Settings() {
+  const [tab, setTab] = useState<TabId>('categories')
+
   return (
-    <div className="p-6">
-      <EmptyState
-        icon={<SettingsIcon size={28} />}
-        title="Ajustes"
-        description="Categorías, plantillas de mensaje y configuración del webhook. (Próximamente en la Fase 2.)"
+    <div className="p-6 max-w-5xl mx-auto">
+      <div className="mb-5">
+        <h2 className="text-lg font-semibold text-ink">Ajustes</h2>
+        <p className="text-sm text-ink-soft mt-1">
+          Configura categorías, plantillas de mensaje y el webhook de envío.
+        </p>
+      </div>
+
+      <Tabs
+        items={tabs}
+        value={tab}
+        onChange={(id) => setTab(id as TabId)}
+        className="mb-5"
       />
+
+      {tab === 'categories' && <CategoriesTab />}
+      {tab === 'templates' && <TemplatesTab />}
+      {tab === 'webhook' && <WebhookTab />}
     </div>
   )
 }

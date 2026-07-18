@@ -1,0 +1,51 @@
+import { cn } from '@/lib/cn'
+
+/**
+ * WhatsApp-style message bubble. Reused by the template editor (synthetic
+ * demo context) and the campaign preview (real recipient). Pure presentational.
+ */
+export interface MessagePreviewProps {
+  recipientName: string
+  message: string
+  /** When true, renders an italic caption "Así lo verá {recipientName}". */
+  caption?: boolean
+  className?: string
+}
+
+export function MessagePreview({
+  recipientName,
+  message,
+  caption = true,
+  className,
+}: MessagePreviewProps) {
+  return (
+    <div className={cn('flex flex-col', className)}>
+      {caption && (
+        <p className="text-2xs uppercase tracking-wide text-ink-mute mb-2">
+          Así lo verá {recipientName || 'el destinatario'}
+        </p>
+      )}
+      <div className="rounded-md bg-paper border border-mist overflow-hidden">
+        {/* Header bar mimicking a WhatsApp chat */}
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-mist bg-vegetal-soft/40">
+          <span className="h-7 w-7 rounded-full bg-vegetal text-paper flex items-center justify-center text-xs font-medium">
+            {recipientName?.[0]?.toUpperCase() || '?'}
+          </span>
+          <span className="text-sm font-medium text-ink truncate">
+            {recipientName || 'Destinatario'}
+          </span>
+        </div>
+        {/* Bubble */}
+        <div className="p-3 bg-mist-soft/30 min-h-[6rem]">
+          <div className="rounded-md bg-[#dcf8c6] px-3 py-2 max-w-[85%] whitespace-pre-wrap text-sm text-ink leading-relaxed shadow-sm">
+            {message || (
+              <span className="text-ink-mute italic">
+                (El mensaje aparecerá aquí)
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

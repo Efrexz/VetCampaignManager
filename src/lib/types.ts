@@ -48,3 +48,35 @@ export interface ImportResult {
   }
   detectedCategories: CategoryCount[]
 }
+
+// ── Settings: categories, templates, app config ───────────────────────────────
+
+export interface Category {
+  /** Stable client-side id (nanoid). */
+  id: string
+  /** Display name, e.g. "Vacuna". */
+  name: string
+}
+
+export interface MessageTemplate {
+  /** Stable client-side id (nanoid). */
+  id: string
+  /**
+   * Associated category id, or null for the default fallback template.
+   * At most one template per category; exactly one default overall.
+   */
+  categoryId: string | null
+  /** Human label for the editor list, e.g. "Recordatorio vacuna". */
+  name: string
+  /** Body with {{owner}}, {{pet}}, {{category}} placeholders. */
+  body: string
+  /** True when this is the global default fallback template. */
+  isDefault: boolean
+}
+
+export interface AppSettings {
+  /** n8n webhook URL (empty = mock mode in Phase 4). */
+  webhookUrl: string
+  /** Default country code for phone normalization, e.g. "+51" (Peru). */
+  defaultCountryCode: string
+}

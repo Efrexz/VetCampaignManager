@@ -16,3 +16,4 @@ export {
   Th,
   Td,
 } from './Table'
+export { MessagePreview } from './MessagePreview'
