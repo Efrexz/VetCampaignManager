@@ -71,7 +71,7 @@ src/
 - [x] Phase 0 — Foundations (scaffold, tokens, UI kit, shell, placeholder pages)
 - [x] Phase 1 — Excel Import (parse → validate → summary screen)
 - [x] Phase 2 — Settings: Categories & Templates (+ seed defaults, webhook tab)
-- [ ] Phase 3 — Campaign Preview & Message Preview
+- [x] Phase 3 — Campaign Preview & Message Preview
 - [ ] Phase 4 — Send Campaign & n8n
 - [ ] Phase 5 — Polish (empty/error states, keyboard, focus, reduced-motion, mobile)
 

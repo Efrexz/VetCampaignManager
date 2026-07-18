@@ -6,7 +6,8 @@
  * not here.
  */
 import { create } from 'zustand'
-import type { ImportResult } from '@/lib/types'
+import { defaultEnabledFor } from '@/lib/campaign'
+import type { ImportResult, Recipient } from '@/lib/types'
 
 export type CampaignPhase = 'import' | 'preview' | 'send'
 
@@ -14,49 +15,84 @@ interface CampaignState {
   phase: CampaignPhase
   rawFileName: string | null
   result: ImportResult | null
-  /** Recipients explicitly excluded by the receptionist in the preview (Phase 3). */
-  excludedIds: Set<string>
+  /**
+   * Per-recipient enable override. Initialized to defaults when a result is
+   * set: valid→true, duplicates/invalid→false. The receptionist toggles rows
+   * in the preview. Only "enabled" recipients are sent.
+   */
+  recipientEnabled: Record<string, boolean>
+  /** Currently selected recipient id (drives the right-side preview panel). */
+  selectedId: string | null
 
   setParsedResult: (fileName: string, result: ImportResult) => void
   setPhase: (phase: CampaignPhase) => void
-  exclude: (id: string) => void
-  include: (id: string) => void
+  toggleRecipient: (id: string) => void
+  setEnabledBulk: (ids: string[], enabled: boolean) => void
+  selectRecipient: (id: string | null) => void
   reset: () => void
+}
+
+function initialEnabled(recipients: Recipient[]): Record<string, boolean> {
+  const map: Record<string, boolean> = {}
+  for (const r of recipients) {
+    map[r.id] = defaultEnabledFor(r)
+  }
+  return map
 }
 
 const initialState = {
   phase: 'import' as CampaignPhase,
   rawFileName: null,
   result: null,
-  excludedIds: new Set<string>(),
+  recipientEnabled: {},
+  selectedId: null,
 }
 
 export const useCampaignStore = create<CampaignState>((set) => ({
   ...initialState,
 
   setParsedResult: (fileName, result) =>
-    set({ rawFileName: fileName, result }),
+    set({
+      rawFileName: fileName,
+      result,
+      recipientEnabled: initialEnabled(result.recipients),
+      selectedId: result.recipients[0]?.id ?? null,
+      phase: 'import',
+    }),
 
   setPhase: (phase) => set({ phase }),
 
-  exclude: (id) =>
+  toggleRecipient: (id) =>
     set((s) => {
-      const next = new Set(s.excludedIds)
-      next.add(id)
-      return { excludedIds: next }
+      const r = s.result?.recipients.find((x) => x.id === id)
+      if (!r || r.phoneStatus === 'invalid') return s
+      return {
+        recipientEnabled: {
+          ...s.recipientEnabled,
+          [id]: !(
+            s.recipientEnabled[id] ?? defaultEnabledFor(r)
+          ),
+        },
+      }
     }),
 
-  include: (id) =>
+  setEnabledBulk: (ids, enabled) =>
     set((s) => {
-      const next = new Set(s.excludedIds)
-      next.delete(id)
-      return { excludedIds: next }
+      const next = { ...s.recipientEnabled }
+      for (const id of ids) {
+        const r = s.result?.recipients.find((x) => x.id === id)
+        if (!r || r.phoneStatus === 'invalid') continue
+        next[id] = enabled
+      }
+      return { recipientEnabled: next }
     }),
+
+  selectRecipient: (id) => set({ selectedId: id }),
 
   reset: () =>
     set({
       ...initialState,
-      excludedIds: new Set<string>(),
+      recipientEnabled: {},
     }),
 }))
 

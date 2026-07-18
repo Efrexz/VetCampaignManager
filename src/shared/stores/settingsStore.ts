@@ -18,6 +18,7 @@ import {
   makeCategory,
   makeTemplate,
 } from '@/storage/exports'
+import { resolveTemplateByCategoryName } from '@/lib/campaign'
 import type { AppSettings, Category, MessageTemplate } from '@/lib/types'
 
 interface SettingsState {
@@ -168,12 +169,5 @@ export function resolveTemplateForCategoryName(
   state: SettingsState,
   categoryName: string,
 ): MessageTemplate | undefined {
-  const cat = state.categories.find(
-    (c) => c.name.toLowerCase() === categoryName.toLowerCase(),
-  )
-  if (cat) {
-    const t = state.templates.find((t) => t.categoryId === cat.id)
-    if (t) return t
-  }
-  return state.templates.find((t) => t.isDefault)
+  return resolveTemplateByCategoryName(categoryName, state.categories, state.templates)
 }
