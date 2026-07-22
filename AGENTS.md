@@ -72,7 +72,7 @@ src/
 - [x] Phase 1 — Excel Import (parse → validate → summary screen)
 - [x] Phase 2 — Settings: Categories & Templates (+ seed defaults, webhook tab)
 - [x] Phase 3 — Campaign Preview & Message Preview
-- [ ] Phase 4 — Send Campaign & n8n
+- [x] Phase 4 — Send Campaign & n8n (payload, mock client, dispatch UI)
 - [ ] Phase 5 — Polish (empty/error states, keyboard, focus, reduced-motion, mobile)
 
 ## VetPraxis Excel format (real, observed)

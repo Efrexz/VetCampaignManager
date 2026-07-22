@@ -141,3 +141,70 @@ export function countByStatus(recipients: Recipient[]): {
     duplicate: recipients.filter((r) => r.phoneStatus === 'duplicate').length,
   }
 }
+
+// ── n8n payload contract ──────────────────────────────────────────────────────
+
+/**
+ * The payload posted to the n8n webhook. Versioned via `schema` so the n8n
+ * workflow can route on schema in the future without breaking older flows.
+ *
+ * Each recipient carries the fully-rendered message so n8n / Evolution API
+ * just forwards it. The per-recipient `id` lets future delivery reports join
+ * back to a Supabase `deliveries` table.
+ */
+export interface N8nCampaignPayload {
+  schema: string
+  campaign: {
+    id: string
+    sentAt: string
+    source: string
+    /** Open slot for future fields (branchId, scheduledFor, …) without breaking. */
+    [key: string]: unknown
+  }
+  recipients: Array<{
+    id: string
+    owner: string
+    pet: string
+    phone: string
+    category: string
+    message: string
+  }>
+}
+
+export interface BuildPayloadOptions {
+  /** Bumped per-call id for the campaign (caller passes nanoid or similar). */
+  campaignId: string
+  /** ISO timestamp; defaults to now when omitted. */
+  sentAt?: string
+  /** Source label; defaults to the app constant. */
+  source?: string
+  /** Schema label; defaults to the app constant. */
+  schema?: string
+}
+
+/**
+ * Build the n8n webhook payload from a campaign session. Pure: takes the
+ * already-built sendable list and freezes the envelope. The same function
+ * can run later inside a Supabase edge function that signs the call.
+ */
+export function buildCampaignPayload(
+  sendable: SendableRecipient[],
+  opts: BuildPayloadOptions,
+): N8nCampaignPayload {
+  return {
+    schema: opts.schema ?? 'vetcampaign/v1',
+    campaign: {
+      id: opts.campaignId,
+      sentAt: opts.sentAt ?? new Date().toISOString(),
+      source: opts.source ?? 'VetCampaignManager',
+    },
+    recipients: sendable.map(({ recipient, message }) => ({
+      id: recipient.id,
+      owner: recipient.owner,
+      pet: recipient.pet,
+      phone: recipient.normalizedPhone ?? recipient.rawPhone,
+      category: recipient.category,
+      message: message.text,
+    })),
+  }
+}
