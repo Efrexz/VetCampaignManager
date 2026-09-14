@@ -34,6 +34,8 @@ interface TenantState {
   /** Sede the app is operating on right now (Supabase mode only). */
   currentBranchId: number | null
   hydrated: boolean
+  /** True while hydrate() is in flight (prevents double-triggered hydration). */
+  hydrating: boolean
 
   hydrate: () => Promise<void>
   /** Re-fetch branches of the current tenant and re-resolve the context. */
@@ -62,6 +64,7 @@ function initialState() {
     branches: [] as Branch[],
     currentBranchId: null as number | null,
     hydrated: !HAS_SUPABASE,
+    hydrating: false,
   }
 }
 
@@ -73,55 +76,68 @@ export const useTenantStore = create<TenantState>((set, get) => ({
       set({ hydrated: true })
       return
     }
-    const sb = requireSupabase()
-    const { data, error } = await sb
-      .from('tenant_members')
-      .select(
-        'role, branch_id, tenant:tenants(id, slug, name, default_country_code)',
-      )
-    if (error) {
-      console.error('Failed to hydrate tenants', error)
-      set({ hydrated: true })
+    if (get().hydrating) {
       return
     }
-    const tenants: Tenant[] = (data ?? []).flatMap(
-      (row: {
-        role: Tenant['role']
-        branch_id: number | null
-        tenant:
-          | {
-              id: string
-              slug: string
-              name: string
-              default_country_code: string
-            }
-          | { id: string; slug: string; name: string; default_country_code: string }[]
-          | null
-      }) => {
-        // PostgREST embeds a many-to-one as an object (a membership points to
-        // exactly one tenant) — but older client typings may model it as an
-        // array. Normalize both.
-        const embedded = row.tenant
-        const list = Array.isArray(embedded)
-          ? embedded
-          : embedded
-            ? [embedded]
-            : []
-        return list.map((t) => ({
-          id: t.id,
-          slug: t.slug,
-          name: t.name,
-          defaultCountryCode: t.default_country_code,
-          role: row.role,
-          branchId: row.branch_id,
-        }))
-      },
-    )
-    const currentTenantId = tenants[0]?.id ?? null
-    set({ tenants, currentTenantId, hydrated: true })
+    set({ hydrating: true })
+    try {
+      const sb = requireSupabase()
+      const { data, error } = await sb
+        .from('tenant_members')
+        .select(
+          'role, branch_id, tenant:tenants(id, slug, name, default_country_code)',
+        )
+      if (error) {
+        console.error('Failed to hydrate tenants', error)
+        set({ hydrated: true })
+        return
+      }
+      const tenants: Tenant[] = (data ?? []).flatMap(
+        (row: {
+          role: Tenant['role']
+          branch_id: number | null
+          tenant:
+            | {
+                id: string
+                slug: string
+                name: string
+                default_country_code: string
+              }
+            | { id: string; slug: string; name: string; default_country_code: string }[]
+            | null
+        }) => {
+          // PostgREST embeds a many-to-one as an object (a membership points
+          // to exactly one tenant) — but older client typings may model it as
+          // an array. Normalize both.
+          const embedded = row.tenant
+          const list = Array.isArray(embedded)
+            ? embedded
+            : embedded
+              ? [embedded]
+              : []
+          return list.map((t) => ({
+            id: t.id,
+            slug: t.slug,
+            name: t.name,
+            defaultCountryCode: t.default_country_code,
+            role: row.role,
+            branchId: row.branch_id,
+          }))
+        },
+      )
+      const currentTenantId = tenants[0]?.id ?? null
+      set({ tenants, currentTenantId })
 
-    // Branches of the current tenant + resolved branch context.
-    await get().loadBranches()
+      // Branches of the current tenant + resolved branch context. `hydrated`
+      // flips true only AFTER this completes: between "memberships loaded"
+      // and "branches loaded" the context is genuinely incomplete, and
+      // marking the store ready there made the settings hydrate run too
+      // early ("No hay sede activa" for branch-bound users).
+      await get().loadBranches()
+      set({ hydrated: true })
+    } finally {
+      set({ hydrating: false })
+    }
   },
 
   loadBranches: async () => {

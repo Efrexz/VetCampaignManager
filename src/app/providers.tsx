@@ -14,7 +14,12 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const auth = useAuth()
   const tenantStore = useTenantStore()
 
-  if (HAS_SUPABASE && !tenantStore.hydrated && auth.authenticated) {
+  if (
+    HAS_SUPABASE &&
+    !tenantStore.hydrated &&
+    !tenantStore.hydrating &&
+    auth.authenticated
+  ) {
     void tenantStore.hydrate()
   }
 
