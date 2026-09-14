@@ -1,8 +1,18 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Send, Settings, PawPrint, History } from 'lucide-react'
+import {
+  Home,
+  Send,
+  Settings,
+  PawPrint,
+  History,
+  LogOut,
+  Loader2,
+} from 'lucide-react'
+import { useState } from 'react'
 import { cn } from '@/lib/cn'
 import { APP } from '@/app/env'
 import { HAS_SUPABASE } from '@/integrations/supabase'
+import { useAuth } from '@/shared/hooks/useAuth'
 
 const baseNav = [
   { to: '/', label: 'Inicio', icon: Home, end: true },
@@ -48,13 +58,44 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-4 py-3 border-t border-mist">
+      <div className="px-4 py-3 border-t border-mist space-y-2">
         <p className="text-2xs text-ink-mute leading-tight">
           {HAS_SUPABASE
             ? 'Conectado a la cuenta de la clínica'
             : 'Tus datos quedan guardados en esta computadora'}
         </p>
+        <SignOutButton />
       </div>
     </aside>
+  )
+}
+
+function SignOutButton() {
+  const auth = useAuth()
+  const [busy, setBusy] = useState(false)
+  if (!HAS_SUPABASE) return null
+
+  const handleSignOut = async () => {
+    if (busy) return
+    setBusy(true)
+    await auth.signOut()
+    setBusy(false)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleSignOut}
+      disabled={busy}
+      title={auth.userLabel || 'Cerrar sesión'}
+      className={cn(
+        'flex items-center gap-2.5 w-full px-3 h-9 rounded-sm text-sm transition-colors',
+        'text-ink-soft hover:bg-danger-soft/40 hover:text-danger',
+        busy && 'opacity-60',
+      )}
+    >
+      {busy ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
+      Cerrar sesión
+    </button>
   )
 }

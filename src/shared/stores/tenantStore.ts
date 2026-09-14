@@ -82,11 +82,21 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     set({ hydrating: true })
     try {
       const sb = requireSupabase()
+      // ONLY the current user's memberships. The RLS select policy exposes the
+      // whole tenant member list; without this filter the query returns other
+      // members' rows too, whose branch_id (owner = NULL) could win the race
+      // and flip the store into "sees all branches" for a branch-bound user.
+      const { data: userData } = await sb.auth.getUser()
+      const currentUserId = userData.user?.id
+      if (!currentUserId) {
+        throw new Error('Sesión no válida. Inicia sesión de nuevo.')
+      }
       const { data, error } = await sb
         .from('tenant_members')
         .select(
           'role, branch_id, tenant:tenants(id, slug, name, default_country_code)',
         )
+        .eq('user_id', currentUserId)
       if (error) {
         console.error('Failed to hydrate tenants', error)
         set({ hydrated: true })
