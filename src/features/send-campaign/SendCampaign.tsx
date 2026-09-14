@@ -128,22 +128,8 @@ export function SendCampaign() {
         r.phoneStatus === 'valid' &&
         !(recipientEnabled[r.id] ?? defaultEnabledFor(r)),
     ).length
-    // Persist campaign + audit entry (localStorage envelope or Supabase table).
-    void recordCampaign({
-      id: previewPayload.campaign.id,
-      sentBy: auth.userId,
-      totalRecipients: totals.totalRows,
-      enabledRecipients: sendable.length,
-      invalidRecipients: totals.invalid,
-      duplicateRecipients: totals.duplicate,
-      excludedRecipients: excludedCount,
-      mock: res.mock,
-      branch: settings.branchName,
-      sourceFile: fileName ?? undefined,
-      payload: previewPayload,
-      status: res.ok ? 'sent' : 'failed',
-      errorMessage: res.ok ? null : (res.error ?? 'Error desconocido'),
-    })
+
+    // Audit entry is independent — fire and forget.
     void recordAudit({
       userId: auth.userId,
       action: 'campaign.send',
@@ -156,31 +142,54 @@ export function SendCampaign() {
         status: res.status,
       },
     })
-    if (res.ok) {
-      setStatus('success')
-      // Real dispatch: stamp the branch's contact ledger (both backends) and
-      // write the initial 'queued' delivery rows (Supabase only — the local
-      // mode keeps counters on the campaign record to save quota). Demo
-      // sends record nothing: nothing actually left the app.
-      if (!res.mock) {
-        const contactEntries: ContactEntry[] = sendable
-          .map(({ recipient }) => ({
-            phone: recipient.normalizedPhone ?? recipient.rawPhone,
-            ownerName: recipient.owner,
-            petName: recipient.pet,
-          }))
-        void markContacted(contactEntries).catch((err) => {
-          console.warn('contact ledger update failed', err)
-        })
+
+    // Persistence, SEQUENCED on purpose (runs for sent AND failed campaigns):
+    //   1. campaign row — the deliveries' FK target must exist first (fired in
+    //      parallel once, deliveries lost the race and vanished).
+    //   2. delivery rows ('queued') — n8n flips them to delivered/failed.
+    //   3. contact ledger stamp (independent; last for a clear order).
+    // Only REAL dispatches write deliveries/contacts; demo sends record just
+    // the campaign (flagged mock).
+    const dispatched = res.ok && !res.mock
+    void (async () => {
+      await recordCampaign({
+        id: previewPayload.campaign.id,
+        sentBy: auth.userId,
+        totalRecipients: totals.totalRows,
+        enabledRecipients: sendable.length,
+        invalidRecipients: totals.invalid,
+        duplicateRecipients: totals.duplicate,
+        excludedRecipients: excludedCount,
+        mock: res.mock,
+        branch: settings.branchName,
+        sourceFile: fileName ?? undefined,
+        payload: previewPayload,
+        status: res.ok ? 'sent' : 'failed',
+        errorMessage: res.ok ? null : (res.error ?? 'Error desconocido'),
+      })
+      if (dispatched) {
         const deliveryEntries: DeliveryEntry[] = previewPayload.recipients.map(
           (r) => ({ recipientId: r.id, phone: r.phone }),
         )
-        void recordDeliveries(previewPayload.campaign.id, deliveryEntries).catch(
-          (err) => {
-            console.warn('delivery rows failed', err)
-          },
+        await recordDeliveries(previewPayload.campaign.id, deliveryEntries)
+        const contactEntries: ContactEntry[] = sendable.map(({ recipient }) => ({
+          phone: recipient.normalizedPhone ?? recipient.rawPhone,
+          ownerName: recipient.owner,
+          petName: recipient.pet,
+        }))
+        await markContacted(contactEntries)
+      }
+    })().catch((err) => {
+      console.warn('campaign persistence failed', err)
+      if (dispatched) {
+        toast.error(
+          'La campaña se envió, pero no todo quedó registrado en el historial. Avísale al encargado.',
         )
       }
+    })
+
+    if (res.ok) {
+      setStatus('success')
       if (res.mock) {
         toast.success('Prueba completada: no se envió nada de verdad.', {
           description: res.detail,
