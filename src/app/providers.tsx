@@ -1,9 +1,10 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { useHydrateSettings } from '@/shared/hooks/useHydrateSettings'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { useTenantStore } from '@/shared/stores/tenantStore'
+import { useSettingsStore } from '@/shared/stores/settingsStore'
 import { HAS_SUPABASE } from '@/integrations/supabase'
 import { Spinner } from '@/shared/components/ui'
 
@@ -16,6 +17,25 @@ export function AppProviders({ children }: { children: ReactNode }) {
   if (HAS_SUPABASE && !tenantStore.hydrated && auth.authenticated) {
     void tenantStore.hydrate()
   }
+
+  // Sign-out hygiene: when the session ends (user action OR an expired token
+  // nobody could refresh), clear tenant + settings so the NEXT user never
+  // inherits the previous one's clinic/branch context.
+  const sawAuthenticatedUser = useRef(false)
+  useEffect(() => {
+    if (!HAS_SUPABASE || auth.loading) {
+      return
+    }
+    if (auth.authenticated) {
+      sawAuthenticatedUser.current = true
+      return
+    }
+    if (sawAuthenticatedUser.current) {
+      sawAuthenticatedUser.current = false
+      useTenantStore.getState().reset()
+      useSettingsStore.getState().reset()
+    }
+  }, [auth.loading, auth.authenticated])
 
   // Two distinct waits, kept separate on purpose:
   //  - waitingForAuth: the Supabase session check is still in flight.

@@ -36,6 +36,8 @@ interface SettingsState {
   hydrated: boolean
 
   hydrate: () => Promise<void>
+  /** Clear in-memory state (called on sign-out so the next user starts clean). */
+  reset: () => void
 
   addCategory: (name: string) => Promise<void>
   updateCategory: (id: string, name: string) => Promise<void>
@@ -94,6 +96,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
     set({ categories, templates, settings, hydrated: true })
   },
+
+  reset: () =>
+    set({
+      categories: [],
+      templates: [],
+      settings: EMPTY_SETTINGS,
+      hydrated: false,
+    }),
 
   addCategory: async (name) => {
     const trimmed = name.trim()
