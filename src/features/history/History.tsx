@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   History as HistoryIcon,
   AlertCircle,
@@ -8,6 +8,8 @@ import {
 } from 'lucide-react'
 import { Card, Table, Tbody, Td, Th, Thead, Tr } from '@/shared/components/ui'
 import { listCampaigns, type CampaignRecord } from '@/storage/exports'
+import { useTenantStore } from '@/shared/stores/tenantStore'
+import { HAS_SUPABASE } from '@/integrations/supabase'
 
 function fmtDate(iso: string): string {
   try {
@@ -35,6 +37,22 @@ export function History() {
       })
   }, [])
 
+  // Presentation-level scoping: branch-bound members (receptionists) see only
+  // their sede's campaigns; owners/admins see the whole clinic. Security
+  // stays at the RLS tenant boundary — this is a UI decision, not a wall.
+  const myBranchName = useMemo(() => {
+    if (!HAS_SUPABASE) return null
+    const { tenants, currentTenantId, branches } = useTenantStore.getState()
+    const branchId = tenants.find((t) => t.id === currentTenantId)?.branchId
+    if (branchId == null) return null
+    return branches.find((b) => b.id === branchId)?.name ?? null
+  }, [])
+
+  const visible = useMemo(() => {
+    if (records === null || myBranchName === null) return records
+    return records.filter((r) => (r.branch ?? '') === myBranchName)
+  }, [records, myBranchName])
+
   if (records === null) {
     return (
       <div className="flex items-center gap-2 text-sm text-ink-soft">
@@ -43,6 +61,8 @@ export function History() {
       </div>
     )
   }
+
+  const shown = visible ?? []
 
   if (error) {
     return (
@@ -53,7 +73,7 @@ export function History() {
     )
   }
 
-  if (records.length === 0) {
+  if (shown.length === 0) {
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-2">
@@ -62,7 +82,9 @@ export function History() {
         </div>
         <Card className="p-6 text-center">
           <p className="text-sm text-ink-soft">
-            Aún no has enviado ninguna campaña. Cuando envíes una, aparecerá aquí con el detalle de destinatarios y resultado.
+            {myBranchName
+              ? `Tu sede (${myBranchName}) aún no ha enviado ninguna campaña. Cuando envíe una, aparecerá aquí con el detalle de destinatarios y resultado.`
+              : 'Aún no has enviado ninguna campaña. Cuando envíes una, aparecerá aquí con el detalle de destinatarios y resultado.'}
           </p>
         </Card>
       </div>
@@ -73,7 +95,9 @@ export function History() {
     <div className="space-y-4 animate-rise">
       <div className="flex items-center gap-2">
         <HistoryIcon className="text-ink-soft" size={18} />
-        <h2 className="text-md font-semibold text-ink">Historial de campañas</h2>
+        <h2 className="text-md font-semibold text-ink">
+          {myBranchName ? `Historial — ${myBranchName}` : 'Historial de campañas'}
+        </h2>
       </div>
       <Card className="overflow-hidden">
         <Table>
@@ -89,7 +113,7 @@ export function History() {
             </tr>
           </Thead>
           <Tbody>
-            {records.map((r) => (
+            {shown.map((r) => (
               <Tr key={r.id}>
                 <Td className="text-ink-soft">{fmtDate(r.createdAt)}</Td>
                 <Td className="text-ink-soft">{r.branch?.trim() || '—'}</Td>
