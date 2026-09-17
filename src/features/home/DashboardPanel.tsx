@@ -1,23 +1,17 @@
 /**
  * Dashboard panel: aggregates the campaign history (localStorage or Supabase
- * via the storage seam) into month + branch views. Data math lives in
+ * via the storage seam). Views: last 7 days, current month, and the last
+ * 6 months with click-to-zoom into any month. Data math lives in
  * `lib/stats.ts`; this component only loads records and renders.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  BarChart3,
-  Building2,
-  CheckCircle2,
-  CopyX,
-  Send,
-  UserRoundX,
-  Users,
-} from 'lucide-react'
+import { ArrowLeft, BarChart3, Building2, CheckCircle2, CopyX, Send, ShieldCheck, UserRoundX, Users } from 'lucide-react'
 import {
   Card,
   EmptyState,
   Segmented,
+  Spinner,
   Stat,
   Table,
   Tbody,
@@ -26,12 +20,40 @@ import {
   Thead,
   Tr,
 } from '@/shared/components/ui'
-import { Button, Spinner } from '@/shared/components/ui'
+import { Button } from '@/shared/components/ui'
 import { listCampaigns } from '@/storage/exports'
 import type { CampaignRecord } from '@/lib/types'
-import { groupByBranch, groupByMonth } from '@/lib/stats'
+import {
+  aggregateCampaigns,
+  elapsedMonthDays,
+  filterByLastMonths,
+  filterByMonth,
+  filterByRange,
+  groupByBranch,
+  groupByDay,
+  groupByDayInMonth,
+  groupByMonth,
+  monthLabel,
+} from '@/lib/stats'
+import { DailyBarsCard } from './DailyBars'
+import { MonthBarsCard } from './MonthBars'
 
-function fmtMonthMessages(n: number): string {
+/** View ids shown to the user ('day' exists in stats but is not offered). */
+type RangeView = 'week' | 'month' | 'six'
+
+const RANGE_OPTIONS: { id: string; label: string }[] = [
+  { id: 'week', label: 'Semana' },
+  { id: 'month', label: 'Mes' },
+  { id: 'six', label: 'Últimos 6 meses' },
+]
+
+const RANGE_CAPTION: Record<RangeView, string> = {
+  week: 'Últimos 7 días',
+  month: 'Este mes',
+  six: 'Últimos 6 meses',
+}
+
+function fmt(n: number): string {
   return n.toLocaleString('es-PE')
 }
 
@@ -39,7 +61,9 @@ export function DashboardPanel() {
   const navigate = useNavigate()
   const [records, setRecords] = useState<CampaignRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [monthsView, setMonthsView] = useState('2')
+  const [range, setRange] = useState<RangeView>('month')
+  /** Zoomed-in month ('YYYY-MM') inside the 6-month view, or null. */
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
 
   useEffect(() => {
     listCampaigns(400)
@@ -49,13 +73,31 @@ export function DashboardPanel() {
       })
   }, [])
 
-  const buckets = useMemo(
-    () => groupByMonth(records ?? [], Number(monthsView)),
-    [records, monthsView],
+  const all: CampaignRecord[] = useMemo(() => records ?? [], [records])
+  const view = range === 'six' && selectedMonth ? 'month-detail' : range
+
+  const windowRecords = useMemo(() => {
+    if (view === 'week') return filterByRange(all, 'week')
+    if (view === 'month') return filterByRange(all, 'month')
+    if (view === 'six') return filterByLastMonths(all, 6)
+    return filterByMonth(all, selectedMonth!)
+  }, [all, view, selectedMonth])
+
+  const monthRows = useMemo(
+    () => (view === 'six' ? groupByMonth(all, 6) : null),
+    [view, all],
   )
-  const branches = useMemo(() => groupByBranch(records ?? []), [records])
-  const current = buckets[buckets.length - 1]
-  const maxMessages = Math.max(1, ...buckets.map((b) => b.totals.messages))
+
+  const dayBuckets = useMemo(() => {
+    if (view === 'week') return groupByDay(windowRecords, 7)
+    if (view === 'month') return groupByDay(windowRecords, elapsedMonthDays())
+    if (view === 'month-detail') return groupByDayInMonth(all, selectedMonth!)
+    return null
+  }, [view, windowRecords, all, selectedMonth])
+
+  const totals = useMemo(() => aggregateCampaigns(windowRecords), [windowRecords])
+  const branches = useMemo(() => groupByBranch(windowRecords), [windowRecords])
+  const hasAnyReal = all.some((r) => !r.mock)
 
   if (records === null) {
     return (
@@ -75,12 +117,12 @@ export function DashboardPanel() {
     )
   }
 
-  if (current && current.totals.campaigns === 0 && buckets.every((b) => b.totals.campaigns === 0)) {
+  if (!hasAnyReal) {
     return (
       <EmptyState
         icon={<BarChart3 size={24} />}
         title="Aún no hay campañas registradas"
-        description="Cuando envíes tu primera campaña, aquí verás cuántos mensajes salieron, cuántos contactos se excluyeron y cómo va mes a mes."
+        description="Cuando envíes tu primera campaña, aquí verás cuántos mensajes salieron, cuántos contactos se excluyeron y cómo va día a día."
         action={
           <Button variant="primary" size="md" onClick={() => navigate('/campaign')}>
             Nueva campaña
@@ -90,6 +132,9 @@ export function DashboardPanel() {
     )
   }
 
+  const headline = view === 'month-detail' ? monthLabel(selectedMonth!) : RANGE_CAPTION[view]
+  const showValueOnBars = (dayBuckets?.length ?? 0) <= 14
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -98,98 +143,80 @@ export function DashboardPanel() {
           Resumen de campañas
         </h2>
         <Segmented
-          value={monthsView}
-          onChange={setMonthsView}
-          options={[
-            { id: '2', label: 'Últimos 2 meses' },
-            { id: '6', label: 'Últimos 6 meses' },
-          ]}
+          value={range}
+          onChange={(id: string) => {
+            setRange(id as RangeView)
+            setSelectedMonth(null)
+          }}
+          options={RANGE_OPTIONS}
         />
       </div>
 
-      {/* Current month at a glance */}
-      {current && (
-        <Card className="p-5">
-          <p className="text-sm text-ink-soft mb-3">
-            Este mes <span className="text-ink-mute">({current.label})</span>
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            <Stat
-              size="sm"
-              icon={<Send size={14} />}
-              label="Campañas"
-              value={current.totals.campaigns}
-              tone="vegetal"
-              mono
-            />
-            <Stat
-              size="sm"
-              icon={<Users size={14} />}
-              label="Mensajes"
-              value={fmtMonthMessages(current.totals.messages)}
-              tone="vegetal"
-              mono
-            />
-            <Stat
-              size="sm"
-              icon={<UserRoundX size={14} />}
-              label="Inválidos"
-              value={fmtMonthMessages(current.totals.invalid)}
-              tone="neutral"
-              mono
-            />
-            <Stat
-              size="sm"
-              icon={<CopyX size={14} />}
-              label="Duplicados"
-              value={fmtMonthMessages(current.totals.duplicate)}
-              tone="neutral"
-              mono
-            />
-            <Stat
-              size="sm"
-              icon={<CheckCircle2 size={14} />}
-              label="Excluidos"
-              value={fmtMonthMessages(current.totals.excluded)}
-              tone="neutral"
-              mono
-            />
-          </div>
-        </Card>
+      {/* Returning from a month zoom */}
+      {view === 'month-detail' && (
+        <button
+          type="button"
+          onClick={() => setSelectedMonth(null)}
+          className="inline-flex items-center gap-1.5 text-xs text-ink-soft hover:text-ink transition-colors"
+        >
+          <ArrowLeft size={13} />
+          <span className="tnum">Volver a {RANGE_CAPTION.six.toLowerCase()}</span>
+        </button>
       )}
 
-      {/* Month-by-month bars */}
+      {/* Selected scope headline numbers */}
       <Card className="p-5">
-        <p className="text-sm text-ink-soft mb-4">Mensajes enviados por mes</p>
-        <div className="space-y-3">
-          {buckets.map((b) => (
-            <div key={b.key} className="flex items-center gap-3">
-              <span className="text-xs text-ink-soft w-20 shrink-0">{b.label}</span>
-              <div className="flex-1 h-5 rounded-sm bg-mist-soft/60 overflow-hidden">
-                <div
-                  className="h-full rounded-sm bg-vegetal/80"
-                  style={{
-                    width: `${(b.totals.messages / maxMessages) * 100}%`,
-                  }}
-                />
-              </div>
-              <span className="text-xs font-mono tnum text-ink w-24 text-right shrink-0">
-                {fmtMonthMessages(b.totals.messages)} msj
-              </span>
-              <span className="text-2xs text-ink-mute w-16 text-right shrink-0 tnum">
-                {b.totals.campaigns} camp.
-              </span>
-            </div>
-          ))}
+        <p className="text-sm text-ink-soft mb-3">{headline}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <Stat size="sm" icon={<Send size={14} />} label="Campañas" value={totals.campaigns} tone="vegetal" mono />
+          <Stat size="sm" icon={<Users size={14} />} label="Mensajes" value={fmt(totals.messages)} tone="vegetal" mono />
+          <Stat size="sm" icon={<UserRoundX size={14} />} label="Inválidos" value={fmt(totals.invalid)} tone="neutral" mono />
+          <Stat size="sm" icon={<CopyX size={14} />} label="Duplicados" value={fmt(totals.duplicate)} tone="neutral" mono />
+          <Stat size="sm" icon={<CheckCircle2 size={14} />} label="Excluidos" value={fmt(totals.excluded)} tone="neutral" mono />
         </div>
       </Card>
 
-      {/* Branch breakdown (single row today, ready for multi-sede) */}
+      {/* Chart: month rows on the 6-month view, daily bars otherwise */}
+      {view === 'six' && monthRows ? (
+        <MonthBarsCard
+          title="Mensajes por mes"
+          months={monthRows}
+          selectedKey={null}
+          onSelect={setSelectedMonth}
+        />
+      ) : dayBuckets ? (
+        <DailyBarsCard
+          title={
+            view === 'week'
+              ? 'Mensajes por día · esta semana'
+              : view === 'month'
+                ? 'Mensajes por día · este mes'
+                : `Mensajes por día · ${monthLabel(selectedMonth!)}`
+          }
+          buckets={dayBuckets}
+          showValues={showValueOnBars}
+        />
+      ) : null}
+
+      {/* Import-quality counters as a quiet protection line */}
+      {(totals.invalid > 0 || totals.duplicate > 0 || totals.excluded > 0) && (
+        <p className="text-xs text-ink-mute flex items-start gap-1.5 px-1">
+          <ShieldCheck size={13} className="text-vegetal shrink-0 mt-0.5" />
+          <span className="tnum">
+            Filtrado automático ({headline.toLowerCase()}):{' '}
+            {fmt(totals.invalid)} teléfono(s) inválido(s) · {fmt(totals.duplicate)}{' '}
+            duplicado(s) · {fmt(totals.excluded)} excluido(s) por protección (no
+            contactar / avisado hace poco).
+          </span>
+        </p>
+      )}
+
+      {/* Branch breakdown within the selected scope */}
       {branches.length > 0 && (
         <Card className="overflow-hidden">
           <p className="text-sm text-ink-soft p-5 pb-3 flex items-center gap-2">
             <Building2 size={14} className="text-vegetal" />
-            Por sede
+            Por sede <span className="text-ink-mute">· {headline.toLowerCase()}</span>
           </p>
           <Table>
             <Thead className="bg-mist-soft/40">
@@ -208,7 +235,7 @@ export function DashboardPanel() {
                     {b.totals.campaigns}
                   </Td>
                   <Td className="text-right font-mono tnum text-ink">
-                    {fmtMonthMessages(b.totals.messages)}
+                    {fmt(b.totals.messages)}
                   </Td>
                   <Td className="text-right font-mono tnum text-ink-soft">
                     {b.totals.excluded}

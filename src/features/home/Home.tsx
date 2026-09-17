@@ -1,11 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import { FileDown, FileSpreadsheet, ArrowRight, Send } from 'lucide-react'
-import { Button, Card, MessagePreview } from '@/shared/components/ui'
+import { Button, Card } from '@/shared/components/ui'
 import { DashboardPanel } from './DashboardPanel'
 import { APP } from '@/app/env'
-
-const DEMO_MESSAGE =
-  'Hola María 👋\n\nNos encantaría ver a Rocko 🐾\n\nResponde para agendar.'
 
 function greeting(): string {
   const h = new Date().getHours()
@@ -43,7 +40,7 @@ export default function Home() {
       </h1>
 
       {/* Hero: the outcome of the product, shown on landing */}
-      <Card className="mt-5 grid grid-cols-1 lg:grid-cols-[1fr,380px] gap-6 p-6 items-center">
+      <Card className="mt-5 p-6">
         <div>
           <p className="text-sm text-ink-soft max-w-md leading-relaxed">
             Importa el reporte de VetPraxis, revisa a quién le escribirás y
@@ -59,11 +56,6 @@ export default function Home() {
             </span>
           </div>
         </div>
-        <MessagePreview
-          recipientName="María"
-          message={DEMO_MESSAGE}
-          caption={false}
-        />
       </Card>
 
       {/* Campaign results: month, branches, trend */}
