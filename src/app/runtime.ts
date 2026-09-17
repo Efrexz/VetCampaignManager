@@ -10,7 +10,6 @@
 import { z } from 'zod'
 
 const envSchema = z.object({
-  VITE_N8N_WEBHOOK_URL: z.string().url().or(z.literal('')).default(''),
   VITE_SUPABASE_URL: z.string().url().or(z.literal('')).default(''),
   VITE_SUPABASE_ANON_KEY: z.string().default(''),
   VITE_SENTRY_DSN: z.string().url().or(z.literal('')).default(''),

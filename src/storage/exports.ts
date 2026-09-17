@@ -33,6 +33,11 @@ import {
   recordCampaign as recordCampaignLocal,
   listCampaigns as listCampaignsLocal,
 } from './campaigns'
+import {
+  findContactStates as findContactStatesLocal,
+  markContacted as markContactedLocal,
+} from './contacts'
+import type { ContactEntry, DeliveryEntry } from './supabase'
 
 // ── Supabase implementation (only used when HAS_SUPABASE) ────────────────────
 import * as supabaseStorage from './supabase'
@@ -91,8 +96,10 @@ export const makeTemplate = (
 ) => pick(makeTemplateLocal, supabaseStorage.makeTemplate)(input)
 
 /**
- * Adapters between `AppSettings` (what feature code uses) and `ClinicSettings`
- * (what the Supabase storage layer returns).
+ * Adapters between `AppSettings` (what feature code uses) and the Supabase
+ * storage layer. In Supabase mode the webhook + HMAC live on the BRANCH row
+ * (migration 0003); the branch name comes from the same row so the UI can
+ * label what it is configuring.
  */
 const settingsAdapter = {
   get: async (): Promise<AppSettings> => {
@@ -102,6 +109,7 @@ const settingsAdapter = {
         webhookUrl: c.webhookUrl,
         defaultCountryCode: '', // filled by settingsStore from tenant
         hmacSecret: c.hmacSecret,
+        branchName: c.branchName,
       }
     }
     return getSettingsLocal()
@@ -111,6 +119,7 @@ const settingsAdapter = {
       await supabaseStorage.saveSettings({
         webhookUrl: s.webhookUrl,
         hmacSecret: s.hmacSecret ?? '',
+        branchName: s.branchName ?? '',
       })
       return s
     }
@@ -136,8 +145,9 @@ export const seedIfEmpty = () =>
 // The audit log is a Supabase-mode feature (no-ops in localStorage mode).
 
 export type { CampaignRecord, CampaignDraft } from '@/lib/types'
+export type { AuditEntry, ContactEntry, DeliveryEntry } from './supabase'
 import type { AuditEntry } from './supabase'
-export type { AuditEntry }
+import type { ContactState } from '@/lib/types'
 
 const noopRecordAudit = async () => {}
 const emptyAudit = async (): Promise<AuditEntry[]> => []
@@ -145,6 +155,30 @@ const emptyAudit = async (): Promise<AuditEntry[]> => []
 export const recordCampaign = pick(recordCampaignLocal, supabaseStorage.recordCampaign)
 export const listCampaigns: (limit?: number) => Promise<CampaignRecord[]> =
   pick(listCampaignsLocal, supabaseStorage.listCampaigns)
+
+// ── Contact ledger (branch-scoped; both backends) ─────────────────────────────
+
+export const findContactStates: (
+  phones: string[],
+) => Promise<Map<string, ContactState>> = pick(
+  findContactStatesLocal,
+  supabaseStorage.findContactStates,
+)
+export const markContacted: (entries: ContactEntry[]) => Promise<void> = pick(
+  markContactedLocal,
+  supabaseStorage.markContacted,
+)
+
+// ── Delivery reports (Supabase only — local mode keeps counters on the
+//    campaign record; per-message rows would eat the browser quota) ──────────
+
+export const recordDeliveries: (
+  campaignId: string,
+  entries: DeliveryEntry[],
+) => Promise<void> = HAS_SUPABASE
+  ? supabaseStorage.recordDeliveries
+  : async () => {}
+
 export const recordAudit = HAS_SUPABASE ? supabaseStorage.recordAudit : noopRecordAudit
 export const listAudit: (limit?: number) => Promise<AuditEntry[]> = HAS_SUPABASE
   ? supabaseStorage.listAudit
