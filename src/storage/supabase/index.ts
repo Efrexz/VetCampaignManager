@@ -422,7 +422,7 @@ export async function listCampaigns(limit = 50): Promise<CampaignRecord[]> {
   const { data, error } = await sb
     .from('campaigns')
     .select(
-      'id, sent_by, total_recipients, enabled_recipients, invalid_recipients, duplicate_recipients, excluded_recipients, mock, source_file, payload, status, error_message, created_at, branch:branches(name)',
+      'id, sent_by, total_recipients, enabled_recipients, invalid_recipients, duplicate_recipients, excluded_recipients, mock, source_file, payload, status, error_message, created_at, branch_id, branch:branches(name)',
     )
     .eq('tenant_id', tenantId())
     .order('created_at', { ascending: false })
@@ -449,6 +449,7 @@ export async function listCampaigns(limit = 50): Promise<CampaignRecord[]> {
       mock: row.mock,
       sourceFile: row.source_file ?? undefined,
       branch: branchName ?? undefined,
+      branchId: typeof row.branch_id === 'number' ? row.branch_id : undefined,
       payload: row.payload,
       status: row.status,
       errorMessage: row.error_message,

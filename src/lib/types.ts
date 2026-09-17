@@ -149,6 +149,8 @@ export interface CampaignRecord {
   mock?: boolean
   /** Branch (sede) label captured from settings at send time. */
   branch?: string
+  /** Branch (sede) id (Supabase mode); the stable key for filtering. */
+  branchId?: number
   /** Source Excel file name. */
   sourceFile?: string
 }
