@@ -1,10 +1,20 @@
 /**
- * Current tenant context. Only meaningful in Supabase mode — in localStorage
- * mode, the app is single-tenant and this store holds a synthetic "default"
- * tenant that all localStorage reads/writes scope to.
+ * Current tenant + branch context. Only meaningful in Supabase mode — in
+ * localStorage mode, the app is single-tenant/single-sede and this store
+ * holds a synthetic "default" tenant.
+ *
+ * Branch rule (migration 0003): the current user's `tenant_members.branch_id`
+ * is NULL for owner/admin (they see ALL branches of the tenant, and the first
+ * branch is selected by default) or a concrete branch id for branch-bound
+ * members (receptionists).
  */
 import { create } from 'zustand'
 import { HAS_SUPABASE, requireSupabase } from '@/integrations/supabase'
+
+export interface Branch {
+  id: number
+  name: string
+}
 
 export interface Tenant {
   id: string
@@ -12,15 +22,26 @@ export interface Tenant {
   name: string
   defaultCountryCode: string
   role: 'owner' | 'admin' | 'recepcionista'
+  /** Branch the member is bound to. NULL = owner/admin (all branches). */
+  branchId: number | null
 }
 
 interface TenantState {
   tenants: Tenant[]
   currentTenantId: string | null
+  /** Branches of the CURRENT tenant (Supabase mode only). */
+  branches: Branch[]
+  /** Sede the app is operating on right now (Supabase mode only). */
+  currentBranchId: number | null
   hydrated: boolean
+  /** True while hydrate() is in flight (prevents double-triggered hydration). */
+  hydrating: boolean
 
   hydrate: () => Promise<void>
+  /** Re-fetch branches of the current tenant and re-resolve the context. */
+  loadBranches: () => Promise<void>
   setCurrent: (tenantId: string) => void
+  setCurrentBranch: (branchId: number) => void
   createTenant: (name: string, slug: string) => Promise<Tenant>
   reset: () => void
 }
@@ -32,48 +53,137 @@ const LOCAL_TENANT: Tenant = {
   name: 'Clínica local',
   defaultCountryCode: '+51',
   role: 'owner',
+  branchId: null,
 }
 
-export const useTenantStore = create<TenantState>((set) => ({
-  tenants: HAS_SUPABASE ? [] : [LOCAL_TENANT],
-  currentTenantId: HAS_SUPABASE ? null : LOCAL_TENANT_ID,
-  hydrated: !HAS_SUPABASE,
+/** Initial state, re-used by `reset` and by the store constructor. */
+function initialState() {
+  return {
+    tenants: HAS_SUPABASE ? ([] as Tenant[]) : [LOCAL_TENANT],
+    currentTenantId: HAS_SUPABASE ? null : LOCAL_TENANT_ID,
+    branches: [] as Branch[],
+    currentBranchId: null as number | null,
+    hydrated: !HAS_SUPABASE,
+    hydrating: false,
+  }
+}
+
+export const useTenantStore = create<TenantState>((set, get) => ({
+  ...initialState(),
 
   hydrate: async () => {
     if (!HAS_SUPABASE) {
       set({ hydrated: true })
       return
     }
-    const sb = requireSupabase()
-    const { data, error } = await sb
-      .from('tenant_members')
-      .select('role, tenant:tenants(id, slug, name, default_country_code)')
-    if (error) {
-      console.error('Failed to hydrate tenants', error)
-      set({ hydrated: true })
+    if (get().hydrating) {
       return
     }
-    const tenants: Tenant[] = (data ?? []).flatMap((row: {
-      role: Tenant['role']
-      tenant: { id: string; slug: string; name: string; default_country_code: string }[] | null
-    }) => {
-      const list = row.tenant ?? []
-      return list.map((t) => ({
-        id: t.id,
-        slug: t.slug,
-        name: t.name,
-        defaultCountryCode: t.default_country_code,
-        role: row.role,
-      }))
-    })
-    set({
-      tenants,
-      currentTenantId: tenants[0]?.id ?? null,
-      hydrated: true,
-    })
+    set({ hydrating: true })
+    try {
+      const sb = requireSupabase()
+      // ONLY the current user's memberships. The RLS select policy exposes the
+      // whole tenant member list; without this filter the query returns other
+      // members' rows too, whose branch_id (owner = NULL) could win the race
+      // and flip the store into "sees all branches" for a branch-bound user.
+      const { data: userData } = await sb.auth.getUser()
+      const currentUserId = userData.user?.id
+      if (!currentUserId) {
+        throw new Error('Sesión no válida. Inicia sesión de nuevo.')
+      }
+      const { data, error } = await sb
+        .from('tenant_members')
+        .select(
+          'role, branch_id, tenant:tenants(id, slug, name, default_country_code)',
+        )
+        .eq('user_id', currentUserId)
+      if (error) {
+        console.error('Failed to hydrate tenants', error)
+        set({ hydrated: true })
+        return
+      }
+      const tenants: Tenant[] = (data ?? []).flatMap(
+        (row: {
+          role: Tenant['role']
+          branch_id: number | null
+          tenant:
+            | {
+                id: string
+                slug: string
+                name: string
+                default_country_code: string
+              }
+            | { id: string; slug: string; name: string; default_country_code: string }[]
+            | null
+        }) => {
+          // PostgREST embeds a many-to-one as an object (a membership points
+          // to exactly one tenant) — but older client typings may model it as
+          // an array. Normalize both.
+          const embedded = row.tenant
+          const list = Array.isArray(embedded)
+            ? embedded
+            : embedded
+              ? [embedded]
+              : []
+          return list.map((t) => ({
+            id: t.id,
+            slug: t.slug,
+            name: t.name,
+            defaultCountryCode: t.default_country_code,
+            role: row.role,
+            branchId: row.branch_id,
+          }))
+        },
+      )
+      const currentTenantId = tenants[0]?.id ?? null
+      set({ tenants, currentTenantId })
+
+      // Branches of the current tenant + resolved branch context. `hydrated`
+      // flips true only AFTER this completes: between "memberships loaded"
+      // and "branches loaded" the context is genuinely incomplete, and
+      // marking the store ready there made the settings hydrate run too
+      // early ("No hay sede activa" for branch-bound users).
+      await get().loadBranches()
+      set({ hydrated: true })
+    } finally {
+      set({ hydrating: false })
+    }
   },
 
-  setCurrent: (tenantId) => set({ currentTenantId: tenantId }),
+  loadBranches: async () => {
+    if (!HAS_SUPABASE) return
+    const currentTenantId = get().currentTenantId
+    if (!currentTenantId) return
+    const sb = requireSupabase()
+    const { data, error } = await sb
+      .from('branches')
+      .select('id, name')
+      .eq('tenant_id', Number(currentTenantId))
+      .order('name')
+    if (error) {
+      console.error('Failed to hydrate branches', error)
+      return
+    }
+    const branches: Branch[] = data ?? []
+    const bound = get().tenants.find((t) => t.id === currentTenantId)?.branchId
+    // Branch-bound members land in their sede; owners/admins (branchId null)
+    // keep their current selection when still valid, else default to the
+    // first branch. They may switch from the top bar.
+    const prev = get().currentBranchId
+    const currentBranchId =
+      bound ??
+      (prev !== null && branches.some((b) => b.id === prev)
+        ? prev
+        : (branches[0]?.id ?? null))
+    set({ branches, currentBranchId })
+  },
+
+  setCurrent: (tenantId) => {
+    set({ currentTenantId: tenantId })
+    void get().loadBranches()
+  },
+
+  setCurrentBranch: (branchId) => set({ currentBranchId: branchId }),
 
   createTenant: async (name, slug) => {
     const sb = requireSupabase()
@@ -89,18 +199,15 @@ export const useTenantStore = create<TenantState>((set) => ({
       name: data.name,
       defaultCountryCode: data.default_country_code,
       role: 'owner',
+      branchId: null,
     }
     set((s) => ({
       tenants: [...s.tenants, tenant],
       currentTenantId: tenant.id,
     }))
+    await get().loadBranches()
     return tenant
   },
 
-  reset: () =>
-    set({
-      tenants: HAS_SUPABASE ? [] : [LOCAL_TENANT],
-      currentTenantId: HAS_SUPABASE ? null : LOCAL_TENANT_ID,
-      hydrated: !HAS_SUPABASE,
-    }),
+  reset: () => set({ ...initialState() }),
 }))

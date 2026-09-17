@@ -36,6 +36,8 @@ interface SettingsState {
   hydrated: boolean
 
   hydrate: () => Promise<void>
+  /** Clear in-memory state (called on sign-out so the next user starts clean). */
+  reset: () => void
 
   addCategory: (name: string) => Promise<void>
   updateCategory: (id: string, name: string) => Promise<void>
@@ -94,6 +96,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
     set({ categories, templates, settings, hydrated: true })
   },
+
+  reset: () =>
+    set({
+      categories: [],
+      templates: [],
+      settings: EMPTY_SETTINGS,
+      hydrated: false,
+    }),
 
   addCategory: async (name) => {
     const trimmed = name.trim()
@@ -184,7 +194,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   updateSettings: async (partial) => {
     const next = { ...get().settings, ...partial }
     // Persist only the fields the storage backend understands. In Supabase
-    // mode, `defaultCountryCode` belongs to the tenant, not the settings row.
+    // mode, `defaultCountryCode` belongs to the tenant and webhook/hmac/branch
+    // name live on the current branch row.
     const persisted: AppSettings = {
       webhookUrl: next.webhookUrl,
       defaultCountryCode: next.defaultCountryCode,
@@ -192,6 +203,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       branchName: next.branchName ?? '',
     }
     await saveSettings(persisted)
+    if (HAS_SUPABASE) {
+      // The branch row (name) may have changed — refresh the branch context.
+      await useTenantStore.getState().loadBranches()
+    }
     set({ settings: next })
     toast.success('Configuración guardada.')
   },
