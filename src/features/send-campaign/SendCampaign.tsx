@@ -51,6 +51,8 @@ export function SendCampaign() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [payload, setPayload] = useState<N8nCampaignPayload | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
+  /** Timestamp captured at the moment the webhook replied OK. */
+  const [sentAt, setSentAt] = useState<Date | null>(null)
 
   // Build the sendable list + payload up front (memoized).
   const sendable = useMemo(() => {
@@ -189,6 +191,7 @@ export function SendCampaign() {
     })
 
     if (res.ok) {
+      setSentAt(new Date())
       setStatus('success')
       if (res.mock) {
         toast.success('Prueba completada: no se envió nada de verdad.', {
@@ -224,6 +227,14 @@ export function SendCampaign() {
           <h2 className="text-xl font-semibold text-ink tracking-tight">
             ¡Campaña enviada!
           </h2>
+          {sentAt && (
+            <p className="text-2xs text-ink-mute mt-1" aria-live="polite">
+              ✓ {sentAt.toLocaleTimeString('es-PE', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </p>
+          )}
           <p className="text-sm text-ink-soft mt-2 max-w-md mx-auto leading-relaxed">
             Los{' '}
             {payload?.recipients.length ?? 0} mensajes ya están en camino. Cada
