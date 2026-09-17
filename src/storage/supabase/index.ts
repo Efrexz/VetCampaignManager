@@ -8,6 +8,7 @@
  * scoped to tenants the current user belongs to.
  */
 import { newId } from '@/lib/id'
+import { stripPayloadMedia } from '../campaigns'
 import { requireSupabase } from '@/integrations/supabase'
 import { useTenantStore } from '@/shared/stores/tenantStore'
 import type {
@@ -108,7 +109,7 @@ export async function listTemplates(): Promise<MessageTemplate[]> {
   const sb = requireSupabase()
   const { data, error } = await sb
     .from('message_templates')
-    .select('id, category_id, name, body, is_default')
+    .select('id, category_id, name, body, is_default, media')
     .eq('branch_id', branchId())
     .order('is_default', { ascending: false })
     .order('name')
@@ -119,6 +120,7 @@ export async function listTemplates(): Promise<MessageTemplate[]> {
     name: row.name,
     body: row.body,
     isDefault: row.is_default,
+    media: row.media ?? null,
   }))
 }
 
@@ -148,6 +150,7 @@ export async function saveTemplate(t: MessageTemplate): Promise<MessageTemplate>
       name: t.name,
       body: t.body,
       is_default: t.isDefault,
+      media: t.media ?? null,
     })
     .select('id, category_id, name, body, is_default')
     .single()
@@ -195,7 +198,7 @@ export async function getTemplateForCategory(
   const sb = requireSupabase()
   const { data, error } = await sb
     .from('message_templates')
-    .select('id, category_id, name, body, is_default')
+    .select('id, category_id, name, body, is_default, media')
     .eq('branch_id', branchId())
     .eq('category_id', categoryId)
     .maybeSingle()
@@ -207,6 +210,7 @@ export async function getTemplateForCategory(
     name: data.name,
     body: data.body,
     isDefault: data.is_default,
+    media: data.media ?? null,
   }
 }
 
@@ -214,7 +218,7 @@ export async function getDefaultTemplate(): Promise<MessageTemplate | undefined>
   const sb = requireSupabase()
   const { data, error } = await sb
     .from('message_templates')
-    .select('id, category_id, name, body, is_default')
+    .select('id, category_id, name, body, is_default, media')
     .eq('branch_id', branchId())
     .eq('is_default', true)
     .maybeSingle()
@@ -226,6 +230,7 @@ export async function getDefaultTemplate(): Promise<MessageTemplate | undefined>
     name: data.name,
     body: data.body,
     isDefault: data.is_default,
+    media: data.media ?? null,
   }
 }
 
@@ -403,7 +408,9 @@ export async function recordCampaign(record: CampaignDraft): Promise<void> {
     excluded_recipients: record.excludedRecipients ?? 0,
     mock: record.mock ?? false,
     source_file: record.sourceFile ?? null,
-    payload: record.payload,
+    // Quota: store the payload WITHOUT image base64 (images live on
+    // templates, one copy per template — see localStorage `recordCampaign`).
+    payload: stripPayloadMedia(record.payload),
     status: record.status,
     error_message: record.errorMessage,
   })
