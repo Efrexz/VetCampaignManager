@@ -12,6 +12,7 @@ import { Card, Table, Tbody, Td, Th, Thead, Tr } from '@/shared/components/ui'
 import { listCampaigns, type CampaignRecord } from '@/storage/exports'
 import { useTenantStore } from '@/shared/stores/tenantStore'
 import { HAS_SUPABASE } from '@/integrations/supabase'
+import { filterByBranchScope } from '@/lib/branchScope'
 import { CampaignDetailRow } from './CampaignDetailRow'
 
 function fmtDate(iso: string): string {
@@ -49,7 +50,8 @@ export function History() {
   const { myBranchId, myBranchName } = useMemo(() => {
     if (!HAS_SUPABASE) return { myBranchId: null as number | null, myBranchName: null as string | null }
     const { tenants, currentTenantId, branches } = useTenantStore.getState()
-    const branchId = tenants.find((t) => t.id === currentTenantId)?.branchId
+    const branchId =
+      tenants.find((t) => t.id === currentTenantId)?.branchId ?? null
     return {
       myBranchId: branchId,
       myBranchName:
@@ -57,17 +59,13 @@ export function History() {
     }
   }, [])
 
-  const visible = useMemo(() => {
-    if (records === null || (myBranchId === null && myBranchName === null)) {
-      return records
-    }
-    const matches = (r: CampaignRecord): boolean => {
-      if (r.branchId != null) return r.branchId === myBranchId
-      if (myBranchId != null) return (r.branch ?? '') === myBranchName
-      return (r.branch ?? '') === myBranchName
-    }
-    return records.filter(matches)
-  }, [records, myBranchId, myBranchName])
+  const visible = useMemo(
+    () =>
+      records === null
+        ? null
+        : filterByBranchScope(records, myBranchId, myBranchName),
+    [records, myBranchId, myBranchName],
+  )
 
   if (records === null) {
     return (

@@ -11,6 +11,7 @@ import {
   Card,
   EmptyState,
   Segmented,
+  Select,
   Spinner,
   Stat,
   Table,
@@ -23,6 +24,9 @@ import {
 import { Button } from '@/shared/components/ui'
 import { listCampaigns } from '@/storage/exports'
 import type { CampaignRecord } from '@/lib/types'
+import { useTenantStore } from '@/shared/stores/tenantStore'
+import { HAS_SUPABASE } from '@/integrations/supabase'
+import { filterByBranchScope } from '@/lib/branchScope'
 import {
   aggregateCampaigns,
   elapsedMonthDays,
@@ -64,6 +68,25 @@ export function DashboardPanel() {
   const [range, setRange] = useState<RangeView>('month')
   /** Zoomed-in month ('YYYY-MM') inside the 6-month view, or null. */
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
+  /** Owner-only stats scope: null = all sedes (default), number = one sede. */
+  const [scopeBranchId, setScopeBranchId] = useState<number | null>(null)
+
+  const tenants = useTenantStore((s) => s.tenants)
+  const currentTenantId = useTenantStore((s) => s.currentTenantId)
+  const storeBranches = useTenantStore((s) => s.branches)
+
+  // Sede scope resolution. Supabase mode: branch-bound members (receptionists)
+  // are anchored to their sede; owner/admin pick a scope, defaulting to "all".
+  // localStorage mode: single user, no scoping.
+  const memberBranchId = HAS_SUPABASE
+    ? tenants.find((t) => t.id === currentTenantId)?.branchId ?? null
+    : null
+  const scopedBranchId = memberBranchId ?? scopeBranchId
+  const scopedBranchName =
+    scopedBranchId != null
+      ? storeBranches.find((b) => b.id === scopedBranchId)?.name ?? null
+      : null
+  const canPickScope = HAS_SUPABASE && memberBranchId === null && storeBranches.length > 0
 
   useEffect(() => {
     listCampaigns(400)
@@ -74,30 +97,34 @@ export function DashboardPanel() {
   }, [])
 
   const all: CampaignRecord[] = useMemo(() => records ?? [], [records])
+  const scoped = useMemo(
+    () => filterByBranchScope(all, scopedBranchId, scopedBranchName),
+    [all, scopedBranchId, scopedBranchName],
+  )
   const view = range === 'six' && selectedMonth ? 'month-detail' : range
 
   const windowRecords = useMemo(() => {
-    if (view === 'week') return filterByRange(all, 'week')
-    if (view === 'month') return filterByRange(all, 'month')
-    if (view === 'six') return filterByLastMonths(all, 6)
-    return filterByMonth(all, selectedMonth!)
-  }, [all, view, selectedMonth])
+    if (view === 'week') return filterByRange(scoped, 'week')
+    if (view === 'month') return filterByRange(scoped, 'month')
+    if (view === 'six') return filterByLastMonths(scoped, 6)
+    return filterByMonth(scoped, selectedMonth!)
+  }, [scoped, view, selectedMonth])
 
   const monthRows = useMemo(
-    () => (view === 'six' ? groupByMonth(all, 6) : null),
-    [view, all],
+    () => (view === 'six' ? groupByMonth(scoped, 6) : null),
+    [view, scoped],
   )
 
   const dayBuckets = useMemo(() => {
     if (view === 'week') return groupByDay(windowRecords, 7)
     if (view === 'month') return groupByDay(windowRecords, elapsedMonthDays())
-    if (view === 'month-detail') return groupByDayInMonth(all, selectedMonth!)
+    if (view === 'month-detail') return groupByDayInMonth(scoped, selectedMonth!)
     return null
-  }, [view, windowRecords, all, selectedMonth])
+  }, [view, windowRecords, scoped, selectedMonth])
 
   const totals = useMemo(() => aggregateCampaigns(windowRecords), [windowRecords])
   const branches = useMemo(() => groupByBranch(windowRecords), [windowRecords])
-  const hasAnyReal = all.some((r) => !r.mock)
+  const hasAnyReal = scoped.some((r) => !r.mock)
 
   if (records === null) {
     return (
@@ -132,7 +159,11 @@ export function DashboardPanel() {
     )
   }
 
-  const headline = view === 'month-detail' ? monthLabel(selectedMonth!) : RANGE_CAPTION[view]
+  const branchNameSuffix = scopedBranchName ? ` · ${scopedBranchName}` : ''
+  const headline =
+    (view === 'month-detail'
+      ? monthLabel(selectedMonth!)
+      : RANGE_CAPTION[view]) + branchNameSuffix
   const showValueOnBars = (dayBuckets?.length ?? 0) <= 14
 
   return (
@@ -142,14 +173,35 @@ export function DashboardPanel() {
           <BarChart3 size={16} className="text-vegetal" />
           Resumen de campañas
         </h2>
-        <Segmented
-          value={range}
-          onChange={(id: string) => {
-            setRange(id as RangeView)
-            setSelectedMonth(null)
-          }}
-          options={RANGE_OPTIONS}
-        />
+        <div className="flex items-center gap-2">
+          {canPickScope && (
+            <Select
+              value={String(scopeBranchId ?? 'all')}
+              onChange={(e) => {
+                const v = e.target.value
+                setScopeBranchId(v === 'all' ? null : Number(v))
+              }}
+              className="h-7 w-auto text-xs py-0"
+              aria-label="Ámbito de las estadísticas"
+              title="Clínica completa o una sola sede"
+            >
+              <option value="all">Todas las sedes</option>
+              {storeBranches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </Select>
+          )}
+          <Segmented
+            value={range}
+            onChange={(id: string) => {
+              setRange(id as RangeView)
+              setSelectedMonth(null)
+            }}
+            options={RANGE_OPTIONS}
+          />
+        </div>
       </div>
 
       {/* Returning from a month zoom */}
@@ -211,8 +263,9 @@ export function DashboardPanel() {
         </p>
       )}
 
-      {/* Branch breakdown within the selected scope */}
-      {branches.length > 0 && (
+      {/* Branch breakdown — only for the whole-clinic view; a single-sede
+          scope makes the comparison table redundant */}
+      {scopedBranchId === null && branches.length > 0 && (
         <Card className="overflow-hidden">
           <p className="text-sm text-ink-soft p-5 pb-3 flex items-center gap-2">
             <Building2 size={14} className="text-vegetal" />
