@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
@@ -15,13 +15,15 @@ import { Button, Input, Select, Stat } from '@/shared/components/ui'
 import { useCampaignStore } from '@/shared/stores/campaignStore'
 import { useSettingsStore } from '@/shared/stores/settingsStore'
 import {
-  buildSendableRecipients,
-  countByStatus,
+  buildSendableGroups,
+  daysSince,
+  defaultEnabledFor,
+  normalizeCategoryName,
+  recentlyContactedFor,
 } from '@/lib/campaign'
-import { RecipientTable } from './RecipientTable'
+import { groupRecipients, joinPetNames } from '@/lib/grouping'
+import { GroupTable, type GroupRow } from './GroupTable'
 import { MessagePreviewPanel } from './MessagePreviewPanel'
-import { useRecipientFilters } from './useRecipientFilters'
-import type { Recipient } from '@/lib/types'
 
 export function CampaignPreview() {
   const navigate = useNavigate()
@@ -30,13 +32,13 @@ export function CampaignPreview() {
   const recipientEnabled = useCampaignStore((s) => s.recipientEnabled)
   const selectedId = useCampaignStore((s) => s.selectedId)
   const selectRecipient = useCampaignStore((s) => s.selectRecipient)
-  const toggleRecipient = useCampaignStore((s) => s.toggleRecipient)
   const setEnabledBulk = useCampaignStore((s) => s.setEnabledBulk)
   const setPhase = useCampaignStore((s) => s.setPhase)
   const resetStore = useCampaignStore((s) => s.reset)
 
   const categories = useSettingsStore((s) => s.categories)
   const templates = useSettingsStore((s) => s.templates)
+  const recontactDays = useSettingsStore((s) => s.settings.recontactDays)
 
   // Guard: if there's no campaign in memory, go back to import with a toast.
   const notifiedRef = useRef(false)
@@ -50,42 +52,77 @@ export function CampaignPreview() {
     }
   }, [result, navigate])
 
-  const tableRows = useMemo<Array<Recipient & { enabled: boolean }>>(() => {
-    if (!result) return []
-    return result.recipients.map((r) => ({
-      ...r,
-      enabled: recipientEnabled[r.id] ?? r.phoneStatus === 'valid',
-    }))
-  }, [result, recipientEnabled])
-
-  const filters = useRecipientFilters(tableRows)
-
-  const counts = useMemo(
-    () => countByStatus(result?.recipients ?? []),
+  const grouping = useMemo(
+    () => (result ? groupRecipients(result.recipients) : null),
     [result],
   )
+  const groups = useMemo(
+    () => grouping?.groups ?? [],
+    [grouping],
+  )
+
+  const tableRows = useMemo<GroupRow[]>(() => {
+    if (groups.length === 0) return []
+    return groups.map((g) => {
+      const primary = g.recipients[0]
+      const enabled = g.recipients.some(
+        (r) => recipientEnabled[r.id] ?? defaultEnabledFor(r, recontactDays),
+      )
+      const contact = primary.contactState
+      // Last relevant contact: this category if recorded, else the legacy
+      // overall stamp (rows written before migration 0007).
+      const hasPerCat =
+        !!contact?.lastContacts && Object.keys(contact.lastContacts).length > 0
+      const last =
+        (hasPerCat ? contact?.lastContacts?.[normalizeCategoryName(g.category)] : undefined) ??
+        (hasPerCat ? undefined : contact?.lastContactedAt)
+      const days = last ? daysSince(last) : null
+      return {
+        id: g.id,
+        owner: g.owner,
+        petsLabel: joinPetNames(g.pets),
+        petCount: g.pets.length,
+        phone: g.phone,
+        category: g.category,
+        enabled,
+        lastContactAt: last,
+        daysSinceContact: days,
+        blocked: recentlyContactedFor(primary, g.category, recontactDays),
+        noteCount: g.notes.length,
+      }
+    })
+  }, [groups, recipientEnabled, recontactDays])
+
+  const filters = useGroupFilters(tableRows)
 
   const toSendCount = useMemo(() => {
     if (!result) return 0
-    return buildSendableRecipients(
-      result.recipients,
+    return buildSendableGroups(
+      groups,
       categories,
       templates,
       recipientEnabled,
+      recontactDays,
     ).length
-  }, [result, categories, templates, recipientEnabled])
+  }, [result, groups, categories, templates, recipientEnabled, recontactDays])
 
-  const detectedCategoryNames = useMemo(() => {
-    if (!result) return []
-    return result.detectedCategories.map((c) => c.name)
-  }, [result])
+  const counts = useMemo(
+    () => ({
+      totalRows: result?.totals.totalRows ?? 0,
+      messages: groups.length,
+      notSent:
+        (grouping?.exactDuplicateRows ?? 0) + (grouping?.deferredRows ?? 0),
+      invalid: result?.totals.invalid ?? 0,
+    }),
+    [result, groups, grouping],
+  )
 
-  const selectedRecipient: Recipient | null = useMemo(() => {
-    if (!result || !selectedId) return null
-    return result.recipients.find((r) => r.id === selectedId) ?? null
-  }, [result, selectedId])
+  const selectedGroup = useMemo(() => {
+    if (groups.length === 0 || !selectedId) return null
+    return groups.find((g) => g.id === selectedId) ?? null
+  }, [groups, selectedId])
 
-  if (!result) return null
+  if (!result || !grouping) return null
 
   const handleBack = () => {
     setPhase('import')
@@ -117,7 +154,7 @@ export function CampaignPreview() {
           </Button>
           <span className="text-sm text-ink-soft truncate">
             <span className="font-medium text-ink">{fileName}</span>
-            <span className="text-ink-mute"> · {counts.total} filas</span>
+            <span className="text-ink-mute"> · {counts.totalRows} filas</span>
           </span>
         </div>
         <Button variant="ghost" size="sm" onClick={handleNewFile}>
@@ -128,10 +165,15 @@ export function CampaignPreview() {
 
       {/* Stat chips */}
       <div className="flex flex-wrap gap-2 mb-4 text-xs">
-        <Stat variant="chip" label="Total" value={counts.total} tone="neutral" />
+        <Stat variant="chip" label="Filas" value={counts.totalRows} tone="neutral" />
+        <Stat variant="chip" label="Mensajes" value={counts.messages} tone="neutral" />
         <Stat variant="chip" label="A enviar" value={toSendCount} tone="vegetal" highlight />
-        <Stat variant="chip" label="Válidos" value={counts.valid} tone="vegetal" />
-        <Stat variant="chip" label="Duplicados" value={counts.duplicate} tone="warn" />
+        <Stat
+          variant="chip"
+          label="No repetidos"
+          value={counts.notSent}
+          tone="warn"
+        />
         <Stat variant="chip" label="Inválidos" value={counts.invalid} tone="danger" />
       </div>
 
@@ -143,7 +185,7 @@ export function CampaignPreview() {
             className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-mute pointer-events-none"
           />
           <Input
-            value={filters.state.search}
+            value={filters.search}
             onChange={(e) => filters.setSearch(e.target.value)}
             placeholder="Buscar propietario, mascota o teléfono…"
             className="pl-8"
@@ -152,31 +194,24 @@ export function CampaignPreview() {
         <div className="flex items-center gap-1.5">
           <Filter size={14} className="text-ink-mute" />
           <Select
-            value={filters.state.category}
+            value={filters.category}
             onChange={(e) => filters.setCategory(e.target.value)}
             className="w-auto"
           >
             <option value="">Todas las categorías</option>
-            {detectedCategoryNames.map((c) => (
-              <option key={c} value={c}>
-                {c}
+            {result.detectedCategories.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name}
               </option>
             ))}
           </Select>
-          <Select
-            value={filters.state.status}
-            onChange={(e) =>
-              filters.setStatus(e.target.value as typeof filters.state.status)
-            }
-            className="w-auto"
-          >
-            <option value="all">Todos los estados</option>
-            <option value="valid">Válidos</option>
-            <option value="duplicate">Duplicados</option>
-            <option value="invalid">Inválidos</option>
-          </Select>
         </div>
-        <Button variant="ghost" size="sm" onClick={filters.reset} disabled={!filters.isActive}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={filters.reset}
+          disabled={!filters.isActive}
+        >
           <X size={14} />
           Limpiar
         </Button>
@@ -185,7 +220,12 @@ export function CampaignPreview() {
             variant="ghost"
             size="sm"
             onClick={() =>
-              setEnabledBulk(filters.filtered.map((r) => r.id), true)
+              setEnabledBulk(
+                groups
+                  .filter((g) => filters.filtered.some((r) => r.id === g.id))
+                  .flatMap((g) => g.recipients.map((r) => r.id)),
+                true,
+              )
             }
           >
             <CheckCheck size={14} />
@@ -198,20 +238,28 @@ export function CampaignPreview() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr,380px] gap-5">
         <div>
           <p className="text-xs text-ink-mute mb-2">
-            Mostrando {filters.filtered.length} de {result.recipients.length}{' '}
-            destinatarios. Marca la casilla de cada fila para decidir quién
-            recibe el mensaje.
+            {counts.messages} mensaje(s) para {counts.totalRows} filas del
+            Excel. Un cliente con varias mascotas o servicios recibe un
+            mensaje por servicio, sin repeticiones.
           </p>
-          <RecipientTable
+          <GroupTable
             rows={filters.filtered}
             selectedId={selectedId}
-            onSelect={selectRecipient}
-            onToggle={toggleRecipient}
+            onSelect={(id) => selectRecipient(id)}
+            onToggle={(row) => {
+              const group = groups.find((g) => g.id === row.id)
+              if (group) {
+                setEnabledBulk(
+                  group.recipients.map((r) => r.id),
+                  !row.enabled,
+                )
+              }
+            }}
           />
         </div>
         <div>
           <MessagePreviewPanel
-            recipient={selectedRecipient}
+            group={selectedGroup}
             onClose={() => selectRecipient(null)}
           />
         </div>
@@ -222,8 +270,8 @@ export function CampaignPreview() {
         <div className="flex items-center gap-2 text-sm text-ink-soft">
           <Users size={14} />
           <span>
-            <strong className="text-ink tnum">{toSendCount}</strong> destinatario
-            (s) a enviar
+            <strong className="text-ink tnum">{toSendCount}</strong> mensaje(s)
+            a enviar
           </span>
         </div>
         <Button
@@ -236,6 +284,35 @@ export function CampaignPreview() {
           <ArrowRight size={16} />
         </Button>
       </div>
-</div>
+    </div>
   )
+}
+
+function useGroupFilters(rows: GroupRow[]) {
+  const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('')
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (category && r.category !== category) return false
+      if (search) {
+        const haystack = `${r.owner} ${r.petsLabel} ${r.phone} ${r.category}`
+        if (!haystack.toLowerCase().includes(search.trim().toLowerCase())) {
+          return false
+        }
+      }
+      return true
+    })
+  }, [rows, search, category])
+  return {
+    search,
+    setSearch,
+    category,
+    setCategory,
+    filtered,
+    reset: () => {
+      setSearch('')
+      setCategory('')
+    },
+    isActive: search.trim() !== '' || category !== '',
+  }
 }

@@ -15,31 +15,28 @@ import {
 } from '@tanstack/react-table'
 import { ArrowUpDown, Inbox } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { daysSince } from '@/lib/campaign'
 import { Chip, Table, Tbody, Td, Th, Thead, Tr } from '@/shared/components/ui'
-import type { Recipient } from '@/lib/types'
 
-export interface RecipientTableRow extends Recipient {
+export interface GroupRow {
+  id: string
+  owner: string
+  petsLabel: string
+  petCount: number
+  phone: string
+  category: string
   enabled: boolean
+  /** ISO of the last contact — this category, or legacy overall fallback. */
+  lastContactAt?: string
+  daysSinceContact: number | null
+  blocked: boolean
+  noteCount: number
 }
 
 interface Props {
-  rows: RecipientTableRow[]
+  rows: GroupRow[]
   selectedId: string | null
   onSelect: (id: string) => void
-  onToggle: (id: string) => void
-}
-
-const statusTone: Record<Recipient['phoneStatus'], 'vegetal' | 'danger' | 'warn'> = {
-  valid: 'vegetal',
-  invalid: 'danger',
-  duplicate: 'warn',
-}
-
-const statusLabel: Record<Recipient['phoneStatus'], string> = {
-  valid: 'Válido',
-  invalid: 'Inválido',
-  duplicate: 'Duplicado',
+  onToggle: (row: GroupRow) => void
 }
 
 const features = tableFeatures({
@@ -51,9 +48,9 @@ const features = tableFeatures({
   filteredRowModel: createFilteredRowModel(),
 })
 
-const columnHelper = createColumnHelper<typeof features, RecipientTableRow>()
+const columnHelper = createColumnHelper<typeof features, GroupRow>()
 
-export function RecipientTable({ rows, selectedId, onSelect, onToggle }: Props) {
+export function GroupTable({ rows, selectedId, onSelect, onToggle }: Props) {
   const [sorting, setSorting] = useState<SortingState>([])
 
   const columns = useMemo(
@@ -64,22 +61,14 @@ export function RecipientTable({ rows, selectedId, onSelect, onToggle }: Props) 
         enableSorting: false,
         cell: ({ row }) => {
           const r = row.original
-          const disabled = r.phoneStatus === 'invalid'
           return (
             <input
               type="checkbox"
               checked={r.enabled}
-              disabled={disabled}
-              onChange={() => onToggle(r.id)}
+              onChange={() => onToggle(r)}
               onClick={(e) => e.stopPropagation()}
-              className="accent-vegetal h-4 w-4 align-middle disabled:opacity-40"
-              title={
-                disabled
-                  ? 'No se puede enviar: teléfono inválido'
-                  : r.enabled
-                    ? 'Excluir del envío'
-                    : 'Incluir en el envío'
-              }
+              className="accent-vegetal h-4 w-4 align-middle"
+              title={r.enabled ? 'Excluir del envío' : 'Incluir en el envío'}
             />
           )
         },
@@ -87,78 +76,80 @@ export function RecipientTable({ rows, selectedId, onSelect, onToggle }: Props) 
       }),
       columnHelper.accessor('owner', {
         header: 'Propietario',
+        cell: ({ row }) => (
+          <span className="font-medium text-ink truncate block max-w-[12rem]">
+            {row.original.owner}
+          </span>
+        ),
+      }),
+      columnHelper.accessor('petsLabel', {
+        header: 'Mascotas',
         cell: ({ row }) => {
           const r = row.original
           return (
-            <span className="font-medium text-ink truncate block max-w-[12rem]">
-              {r.owner || <span className="text-ink-mute italic">vacío</span>}
-            </span>
-          )
-        },
-      }),
-      columnHelper.accessor('pet', {
-        header: 'Mascota',
-        cell: ({ row }) => {
-          const r = row.original
-          return (
-            <span className="text-ink-soft truncate block max-w-[8rem]">
-              {r.pet || <span className="text-ink-mute italic">—</span>}
-            </span>
-          )
-        },
-      }),
-      columnHelper.accessor('normalizedPhone', {
-        id: 'phone',
-        header: 'Teléfono',
-        enableSorting: true,
-        cell: ({ row }) => {
-          const r = row.original
-          return (
-            <span
-              className="text-ink text-sm"
-              style={{ fontFamily: 'var(--font-mono)' }}
-            >
-              {r.normalizedPhone || (
-                <span className="text-ink-mute">{r.rawPhone || '—'}</span>
-              )}
-            </span>
-          )
-        },
-      }),
-      columnHelper.accessor('category', {
-        header: 'Categoría',
-        cell: ({ row }) => {
-          const r = row.original
-          return <span className="text-ink-soft">{r.category}</span>
-        },
-      }),
-      columnHelper.accessor('phoneStatus', {
-        id: 'status',
-        header: 'Estado',
-        cell: ({ row }) => {
-          const r = row.original
-          const contact = r.contactState
-          const days = contact?.lastContactedAt
-            ? daysSince(contact.lastContactedAt)
-            : null
-          return (
-            <span className="flex flex-wrap gap-1">
-              <Chip tone={statusTone[r.phoneStatus]}>{statusLabel[r.phoneStatus]}</Chip>
-              {contact?.doNotContact && (
-                <Chip tone="danger" title="Marcado como NO CONTACTAR por esta sede">
-                  NO CONTACTAR
+            <span className="flex items-center gap-1.5">
+              <span
+                className="text-ink-soft truncate block max-w-[9rem]"
+                title={r.petsLabel}
+              >
+                {r.petsLabel || (
+                  <span className="text-ink-mute italic">—</span>
+                )}
+              </span>
+              {r.petCount > 1 && (
+                <Chip tone="vegetal" className="!py-0">
+                  {r.petCount}
                 </Chip>
               )}
-              {days !== null && days >= 0 && (
+            </span>
+          )
+        },
+      }),
+      columnHelper.accessor('phone', {
+        header: 'Teléfono',
+        cell: ({ row }) => (
+          <span
+            className="text-ink text-sm"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            {row.original.phone}
+          </span>
+        ),
+      }),
+      columnHelper.accessor('category', {
+        header: 'Servicio',
+        cell: ({ row }) => (
+          <span className="text-ink-soft">{row.original.category}</span>
+        ),
+      }),
+      columnHelper.display({
+        id: 'status',
+        header: 'Estado',
+        enableSorting: false,
+        cell: ({ row }) => {
+          const r = row.original
+          return (
+            <span className="flex flex-wrap gap-1">
+              {r.blocked && (
                 <Chip
                   tone="warn"
-                  title={
-                    days === 0
-                      ? 'Esta sede le escribió hoy'
-                      : `Esta sede le escribió hace ${days} día(s)`
-                  }
+                  title="Ya se le escribió por este servicio hace pocos días (ventana configurable en Ajustes). Puedes forzar el envío si es necesario."
                 >
-                  {days === 0 ? 'Hoy' : `Hace ${days}d`}
+                  {r.daysSinceContact === 0
+                    ? 'Hoy'
+                    : r.daysSinceContact === 1
+                      ? 'Ayer'
+                      : `Hace ${r.daysSinceContact}d`}{' '}
+                  por {r.category}
+                </Chip>
+              )}
+              {!r.blocked && <Chip tone="vegetal">Listo</Chip>}
+              {r.noteCount > 0 && (
+                <Chip
+                  tone="neutral"
+                  title="Filas del Excel que quedaron dentro de este mensaje (no se envían aparte)"
+                >
+                  {r.noteCount} nota{r.noteCount === 1 ? '' : 's'}
                 </Chip>
               )}
             </span>
@@ -172,7 +163,7 @@ export function RecipientTable({ rows, selectedId, onSelect, onToggle }: Props) 
   const table = useTable({
     features,
     data: rows,
-    columns: columns as ColumnDef<typeof features, RecipientTableRow, unknown>[],
+    columns: columns as ColumnDef<typeof features, GroupRow, unknown>[],
     state: { sorting },
     onSortingChange: setSorting,
   })
@@ -182,7 +173,7 @@ export function RecipientTable({ rows, selectedId, onSelect, onToggle }: Props) 
       <div className="rounded-md border border-mist bg-paper py-12 text-center">
         <Inbox className="mx-auto mb-2 text-ink-mute" size={22} />
         <p className="text-sm text-ink-soft">
-          No hay destinatarios que coincidan con los filtros.
+          No hay mensajes que coincidan con los filtros.
         </p>
       </div>
     )
@@ -198,7 +189,9 @@ export function RecipientTable({ rows, selectedId, onSelect, onToggle }: Props) 
                 {hg.headers.map((h) => (
                   <Th
                     key={h.id}
-                    style={{ width: h.getSize() !== 150 ? h.getSize() : undefined }}
+                    style={{
+                      width: h.getSize() !== 150 ? h.getSize() : undefined,
+                    }}
                   >
                     {h.isPlaceholder ? null : h.column.getCanSort() ? (
                       <button
@@ -235,7 +228,10 @@ export function RecipientTable({ rows, selectedId, onSelect, onToggle }: Props) 
                 >
                   {row.getVisibleCells().map((cell) => (
                     <Td key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
                     </Td>
                   ))}
                 </Tr>

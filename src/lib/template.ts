@@ -18,6 +18,8 @@ export interface VariableDef {
 export interface RenderContext {
   owner: string
   pet: string
+  /** All pet names in the group ("Roco, Maxi y Firulais"); falls back to pet. */
+  pets: string
   category: string
   /** Open slot for future expansions (clinic_name, date, …). */
   [key: string]: string
@@ -26,6 +28,7 @@ export interface RenderContext {
 export const VARIABLES: VariableDef[] = [
   { key: 'owner', label: 'Propietario', resolve: (c) => c.owner },
   { key: 'pet', label: 'Mascota', resolve: (c) => c.pet },
+  { key: 'pets', label: 'Mascotas (todas)', resolve: (c) => c.pets || c.pet },
   { key: 'category', label: 'Categoría', resolve: (c) => c.category },
 ]
 
@@ -91,11 +94,12 @@ export function extractVariables(body: string): string[] {
   return [...found]
 }
 
-/** Build a render context from a Recipient (used by Phase 3 campaign preview). */
+/** Build a render context from a Recipient (single-pet fallback path). */
 export function contextFromRecipient(r: Recipient): RenderContext {
   return {
     owner: r.owner,
     pet: r.pet,
+    pets: r.pet,
     category: r.category,
   }
 }
@@ -104,5 +108,6 @@ export function contextFromRecipient(r: Recipient): RenderContext {
 export const DEMO_CONTEXT: RenderContext = {
   owner: 'María',
   pet: 'Rocky',
+  pets: 'Rocky y Canuta',
   category: 'Vacuna',
 }

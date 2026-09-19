@@ -44,6 +44,7 @@ describe('seedIfEmpty', () => {
     expect(await getSettings()).toEqual({
       webhookUrl: '',
       defaultCountryCode: '+51',
+      recontactDays: 10,
     })
   })
 })

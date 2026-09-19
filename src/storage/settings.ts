@@ -1,11 +1,13 @@
 import { getJSON, setJSON } from './storage'
 import { KEYS } from './keys'
 import { APP } from '@/app/env'
+import { RECONTACT_DAYS } from '@/lib/campaign'
 import type { AppSettings } from '@/lib/types'
 
 export const DEFAULT_SETTINGS: AppSettings = {
   webhookUrl: '',
   defaultCountryCode: APP.defaultCountryCode,
+  recontactDays: RECONTACT_DAYS,
 }
 
 export async function getSettings(): Promise<AppSettings> {

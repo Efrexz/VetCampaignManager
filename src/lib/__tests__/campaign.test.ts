@@ -1,16 +1,20 @@
 import { describe, expect, test } from 'vitest'
 import {
-  buildCampaignPayload,
-  buildSendableRecipients,
-  countByStatus,
+  buildGroupPayload,
+  buildSendableGroups,
   daysSince,
   defaultEnabledFor,
   normalizeCategoryName,
-  recentlyContacted,
+  recentlyContactedFor,
+  renderMessageForGroup,
   resolveTemplateByCategoryName,
-  RECONTACT_DAYS,
 } from '../campaign'
-import type { Category, MessageTemplate, Recipient } from '../types'
+import { groupRecipients } from '../grouping'
+import type {
+  Category,
+  MessageTemplate,
+  Recipient,
+} from '../types'
 
 const mkRecipient = (over: Partial<Recipient> = {}): Recipient => ({
   id: 'r1',
@@ -90,49 +94,103 @@ describe('resolveTemplateByCategoryName', () => {
   })
 })
 
-describe('buildSendableRecipients', () => {
-  test('keeps only enabled valid recipients and renders the resolved template', () => {
-    const recipients = [
+describe('buildSendableGroups', () => {
+  test('keeps only enabled groups and renders the resolved template', () => {
+    const groups = groupRecipients([
       mkRecipient({ id: '1', category: 'Vacuna' }),
-      mkRecipient({ id: '2', category: 'HIDRATACIÓN' }),
-      mkRecipient({ id: '3', category: 'Vacuna', phoneStatus: 'invalid' }),
-      mkRecipient({ id: '4', category: 'Vacuna' }),
-    ]
-    const enabled = { '1': true, '2': true, '3': true, '4': false }
-    const out = buildSendableRecipients(recipients, cats, templates, enabled)
-    expect(out.map((s) => s.recipient.id)).toEqual(['1', '2'])
+      mkRecipient({
+        id: '2',
+        normalizedPhone: '+51981111111',
+        category: 'HIDRATACIÓN',
+      }),
+      mkRecipient({ id: '4', pet: 'Maxi' }),
+    ]).groups
+    const enabled = { '1': true, '2': true, '4': false }
+    const out = buildSendableGroups(groups, cats, templates, enabled, 10, NOW)
+    expect(out.map((s) => s.group.id)).toEqual([
+      '+51980000000|vacuna',
+      '+51981111111|hidratacion',
+    ])
     expect(out[0].message.text).toBe('Hola María, cita de Vacuna para Rocky')
-    expect(out[1].message.text).toBe('Hola María, hidrata a Rocky')
   })
 
-  test('defaults an un-toggled recipient to enabled iff phoneStatus is valid', () => {
-    const recipients = [
-      mkRecipient({ id: '1' }),
-      mkRecipient({ id: '2', phoneStatus: 'duplicate' }),
+  test('multi-pet group renders {{pets}} naming every pet', () => {
+    const templatesPets: MessageTemplate[] = [
+      {
+        id: 't-bano',
+        categoryId: null,
+        name: 'Baño todas',
+        body: 'Hola {{owner}}, {{pets}} esperan {{category}}',
+        isDefault: true,
+      },
     ]
-    const out = buildSendableRecipients(recipients, cats, templates, {})
-    expect(out.map((s) => s.recipient.id)).toEqual(['1'])
+    const group = groupRecipients([
+      mkRecipient({ id: '1', pet: 'Roco', category: 'Baño' }),
+      mkRecipient({ id: '2', pet: 'Maxi', category: 'Baño' }),
+    ]).groups
+    const msg = renderMessageForGroup(group[0], cats, templatesPets)
+    expect(msg.text).toBe('Hola María, Roco y Maxi esperan Baño')
+  })
+
+  test('excludes a group whose category was contacted inside the window', () => {
+    const at = new Date(NOW.getTime() - 2 * 86_400_000).toISOString()
+    const group = groupRecipients([
+      mkRecipient({
+        id: '1',
+        contactState: { lastContacts: { vacuna: at }, doNotContact: false },
+      }),
+    ]).groups
+    const out = buildSendableGroups(group, cats, templates, {}, 10, NOW)
+    expect(out).toHaveLength(0)
+  })
+
+  test('a manually re-enabled blocked group IS sent (force-enable)', () => {
+    const at = new Date(NOW.getTime() - 2 * 86_400_000).toISOString()
+    const group = groupRecipients([
+      mkRecipient({
+        id: '1',
+        contactState: { lastContacts: { vacuna: at }, doNotContact: false },
+      }),
+    ]).groups
+    const out = buildSendableGroups(group, cats, templates, { '1': true }, 10, NOW)
+    expect(out).toHaveLength(1)
+  })
+
+  test('other category with recent contact does NOT block this group', () => {
+    const at = new Date(NOW.getTime() - 2 * 86_400_000).toISOString()
+    const group = groupRecipients([
+      mkRecipient({
+        id: '1',
+        category: 'Baño',
+        contactState: { lastContacts: { promociones: at }, doNotContact: false },
+      }),
+    ]).groups
+    const out = buildSendableGroups(group, cats, templates, {}, 10, NOW)
+    expect(out).toHaveLength(1)
+  })
+
+  test('defaults an un-toggled group to enabled iff valid + not contacted', () => {
+    const group = groupRecipients([mkRecipient({ id: '1' })]).groups
+    const out = buildSendableGroups(group, cats, templates, {}, 10, NOW)
+    expect(out).toHaveLength(1)
   })
 })
 
-describe('buildCampaignPayload', () => {
-  test('maps sendable list to payload recipients with rendered messages', () => {
-    const r1 = mkRecipient({ id: '1', owner: 'María', pet: 'Rocky' })
-    const sendable = buildSendableRecipients([r1], cats, templates, { '1': true })
-    const payload = buildCampaignPayload(sendable, {
-      campaignId: 'C',
-      sentAt: '2026-01-01T00:00:00.000Z',
-      source: 'Test',
-      schema: 'vetcampaign/v1',
-    })
-    expect(payload.campaign).toEqual({
-      id: 'C',
-      sentAt: '2026-01-01T00:00:00.000Z',
-      source: 'Test',
-    })
-    expect(payload.recipients).toHaveLength(1)
-    expect(payload.recipients[0]).toMatchObject({
-      id: '1',
+describe('buildGroupPayload', () => {
+  test('maps sendable groups to payload recipients with rendered messages', () => {
+    const group = groupRecipients([
+      mkRecipient({ id: '1', owner: 'María', pet: 'Rocky' }),
+    ]).groups
+    const out = buildGroupPayload(
+      group.map((g) => ({
+        group: g,
+        message: renderMessageForGroup(g, cats, templates),
+      })),
+      { campaignId: 'C', sentAt: '2026-01-01T00:00:00.000Z' },
+    )
+    expect(out.campaign.id).toBe('C')
+    expect(out.recipients[0]).toMatchObject({
+      id: '+51980000000|vacuna',
       owner: 'María',
       pet: 'Rocky',
       phone: '+51980000000',
@@ -141,19 +199,32 @@ describe('buildCampaignPayload', () => {
     })
   })
 
-  test('falls back to rawPhone when normalized is missing', () => {
-    const r1 = mkRecipient({ id: '1', normalizedPhone: undefined })
-    const sendable = buildSendableRecipients([r1], cats, templates, { '1': true })
-    const payload = buildCampaignPayload(sendable, { campaignId: 'C' })
-    expect(payload.recipients[0].phone).toBe('+51 - 980000000')
+  test('multi-pet group carries the joined pet names', () => {
+    const group = groupRecipients([
+      mkRecipient({ pet: 'Roco' }),
+      mkRecipient({ pet: 'Maxi' }),
+    ]).groups
+    const out = buildGroupPayload(
+      group.map((g) => ({
+        group: g,
+        message: renderMessageForGroup(g, cats, templates),
+      })),
+      { campaignId: 'C' },
+    )
+    expect(out.recipients[0].pet).toBe('Roco y Maxi')
   })
 
   test('omits media when no template carries an image', () => {
-    const r1 = mkRecipient({ id: '1', category: 'Vacuna' })
-    const sendable = buildSendableRecipients([r1], cats, templates, { '1': true })
-    const payload = buildCampaignPayload(sendable, { campaignId: 'C' })
-    expect(payload.media).toBeUndefined()
-    expect(payload.recipients[0].mediaKey).toBeUndefined()
+    const group = groupRecipients([mkRecipient()]).groups
+    const out = buildGroupPayload(
+      group.map((g) => ({
+        group: g,
+        message: renderMessageForGroup(g, cats, templates),
+      })),
+      { campaignId: 'C' },
+    )
+    expect(out.media).toBeUndefined()
+    expect(out.recipients[0].mediaKey).toBeUndefined()
   })
 
   test('includes campaign-level media map and per-recipient mediaKey', () => {
@@ -170,45 +241,38 @@ describe('buildCampaignPayload', () => {
           }
         : t,
     )
-    const recipients = [
-      mkRecipient({ id: '1', category: 'Vacuna' }),
-      mkRecipient({ id: '2', category: 'Vacuna' }),
-      mkRecipient({ id: '3', category: 'Hidratación' }),
-    ]
-    const sendable = buildSendableRecipients(recipients, cats, withImage, {
-      '1': true,
-      '2': true,
-      '3': true,
-    })
-    const payload = buildCampaignPayload(sendable, { campaignId: 'C' })
+    const group = groupRecipients([mkRecipient()]).groups
+    const out = buildGroupPayload(
+      group.map((g) => ({
+        group: g,
+        message: renderMessageForGroup(g, cats, withImage),
+      })),
+      { campaignId: 'C' },
+    )
 
-    expect(payload.media).toEqual({
+    expect(out.media).toEqual({
       't-vac': {
         data: 'data:image/jpeg;base64,QUJD',
         mimetype: 'image/jpeg',
         fileName: 'vacuna.jpg',
       },
     })
-    expect(payload.recipients[0].mediaKey).toBe('t-vac')
-    expect(payload.recipients[1].mediaKey).toBe('t-vac')
-    expect(payload.recipients[2].mediaKey).toBeUndefined()
+    expect(out.recipients[0].mediaKey).toBe('t-vac')
   })
-})
 
-describe('countByStatus', () => {
-  test('returns counts per phoneStatus', () => {
-    const r: Recipient[] = [
-      mkRecipient({ id: '1', phoneStatus: 'valid' }),
-      mkRecipient({ id: '2', phoneStatus: 'valid' }),
-      mkRecipient({ id: '3', phoneStatus: 'duplicate' }),
-      mkRecipient({ id: '4', phoneStatus: 'invalid' }),
-    ]
-    expect(countByStatus(r)).toEqual({
-      total: 4,
-      valid: 2,
-      duplicate: 1,
-      invalid: 1,
-    })
+  test('grouping produces stable counts to feed the header chips', () => {
+    const out = groupRecipients([
+      mkRecipient({ id: '1', pet: 'Rocko', category: 'Vacuna' }),
+      mkRecipient({ id: '2', pet: 'Maxi', category: 'Vacuna' }),
+      mkRecipient({
+        id: '3',
+        phoneStatus: 'invalid',
+        normalizedPhone: undefined,
+      }),
+    ])
+    expect(out.groups).toHaveLength(1)
+    expect(out.exactDuplicateRows).toBe(0)
+    expect(out.deferredRows).toBe(0)
   })
 })
 
@@ -229,51 +293,121 @@ describe('daysSince', () => {
   })
 })
 
-describe('recentlyContacted', () => {
-  test('within the window', () => {
-    const days = RECONTACT_DAYS - 1
-    const at = new Date(NOW.getTime() - days * 86_400_000).toISOString()
+describe('recentlyContactedFor (per-category guard)', () => {
+  test('same category within the window → blocked', () => {
+    const at = new Date(NOW.getTime() - 2 * 86_400_000).toISOString()
     expect(
-      recentlyContacted(
-        mkRecipient({ contactState: { lastContactedAt: at, doNotContact: false } }),
+      recentlyContactedFor(
+        mkRecipient({
+          contactState: {
+            lastContacts: { vacuna: at },
+            doNotContact: false,
+          },
+        }),
+        'Vacuna',
+        10,
         NOW,
       ),
     ).toBe(true)
   })
 
-  test('outside the window', () => {
-    const at = new Date(NOW.getTime() - (RECONTACT_DAYS + 5) * 86_400_000).toISOString()
+  test('different category within the window → NOT blocked', () => {
+    const at = new Date(NOW.getTime() - 2 * 86_400_000).toISOString()
     expect(
-      recentlyContacted(
-        mkRecipient({ contactState: { lastContactedAt: at, doNotContact: false } }),
+      recentlyContactedFor(
+        mkRecipient({
+          contactState: { lastContacts: { promociones: at }, doNotContact: false },
+        }),
+        'Vacuna',
+        10,
         NOW,
       ),
     ).toBe(false)
   })
 
-  test('no ledger state → not recently contacted', () => {
-    expect(recentlyContacted(mkRecipient(), NOW)).toBe(false)
+  test('category matching is normalized (case + accents)', () => {
+    const at = new Date(NOW.getTime() - 2 * 86_400_000).toISOString()
+    expect(
+      recentlyContactedFor(
+        mkRecipient({
+          contactState: { lastContacts: { bano: at }, doNotContact: false },
+        }),
+        'BAÑO',
+        10,
+        NOW,
+      ),
+    ).toBe(true)
+  })
+
+  test('outside the window → not blocked', () => {
+    const at = new Date(NOW.getTime() - 15 * 86_400_000).toISOString()
+    expect(
+      recentlyContactedFor(
+        mkRecipient({
+          contactState: { lastContacts: { vacuna: at }, doNotContact: false },
+        }),
+        'Vacuna',
+        10,
+        NOW,
+      ),
+    ).toBe(false)
+  })
+
+  test('no ledger state → not contacted', () => {
+    expect(
+      recentlyContactedFor(mkRecipient(), 'Vacuna', 10, NOW),
+    ).toBe(false)
+  })
+
+  test('legacy row (lastContactedAt only) stays conservative', () => {
+    const at = new Date(NOW.getTime() - 2 * 86_400_000).toISOString()
+    expect(
+      recentlyContactedFor(
+        mkRecipient({ contactState: { lastContactedAt: at, doNotContact: false } }),
+        'Baño',
+        10,
+        NOW,
+      ),
+    ).toBe(true)
   })
 })
 
 describe('defaultEnabledFor with the contact ledger', () => {
   test('valid without ledger state → enabled', () => {
-    expect(defaultEnabledFor(mkRecipient(), NOW)).toBe(true)
+    expect(defaultEnabledFor(mkRecipient(), 10, NOW)).toBe(true)
   })
 
-  test('invalid/duplicate → disabled', () => {
-    expect(defaultEnabledFor(mkRecipient({ phoneStatus: 'invalid' }), NOW)).toBe(false)
-    expect(defaultEnabledFor(mkRecipient({ phoneStatus: 'duplicate' }), NOW)).toBe(false)
+  test('invalid → disabled', () => {
+    expect(
+      defaultEnabledFor(mkRecipient({ phoneStatus: 'invalid' }), 10, NOW),
+    ).toBe(false)
   })
 
-  test('recently contacted by this branch → disabled by default', () => {
+  test('recently contacted for the same category → disabled by default', () => {
     const at = new Date(NOW.getTime() - 2 * 86_400_000).toISOString()
     expect(
       defaultEnabledFor(
-        mkRecipient({ contactState: { lastContactedAt: at, doNotContact: false } }),
+        mkRecipient({
+          contactState: { lastContacts: { vacuna: at }, doNotContact: false },
+        }),
+        10,
         NOW,
       ),
     ).toBe(false)
+  })
+
+  test('contacted for another category → Enabled', () => {
+    const at = new Date(NOW.getTime() - 2 * 86_400_000).toISOString()
+    expect(
+      defaultEnabledFor(
+        mkRecipient({
+          category: 'Baño',
+          contactState: { lastContacts: { vacuna: at }, doNotContact: false },
+        }),
+        10,
+        NOW,
+      ),
+    ).toBe(true)
   })
 
   test('contacted long ago → enabled again', () => {
@@ -281,9 +415,30 @@ describe('defaultEnabledFor with the contact ledger', () => {
     expect(
       defaultEnabledFor(
         mkRecipient({ contactState: { lastContactedAt: at, doNotContact: false } }),
+        10,
         NOW,
       ),
     ).toBe(true)
+  })
+
+  test('blocked by a configurable window (15 days)', () => {
+    const at = new Date(NOW.getTime() - 12 * 86_400_000).toISOString()
+    expect(
+      recentlyContactedFor(
+        mkRecipient({ contactState: { lastContactedAt: at, doNotContact: false } }),
+        'Vacuna',
+        15,
+        NOW,
+      ),
+    ).toBe(true)
+    expect(
+      recentlyContactedFor(
+        mkRecipient({ contactState: { lastContactedAt: at, doNotContact: false } }),
+        'Vacuna',
+        10,
+        NOW,
+      ),
+    ).toBe(false)
   })
 
   test('NO CONTACTAR → disabled even when contacted long ago', () => {
@@ -291,6 +446,7 @@ describe('defaultEnabledFor with the contact ledger', () => {
     expect(
       defaultEnabledFor(
         mkRecipient({ contactState: { lastContactedAt: at, doNotContact: true } }),
+        10,
         NOW,
       ),
     ).toBe(false)

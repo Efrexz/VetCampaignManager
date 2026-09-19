@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Webhook, Save, Eye, EyeOff, Building2 } from 'lucide-react'
+import { Webhook, Save, Eye, EyeOff, Building2, CalendarClock } from 'lucide-react'
 import { Button, Card, Input } from '@/shared/components/ui'
 import { useSettingsStore } from '@/shared/stores/settingsStore'
 import { maskUrl } from '@/lib/format'
+import { RECONTACT_DAYS } from '@/lib/campaign'
 
 export function WebhookTab() {
   const settings = useSettingsStore((s) => s.settings)
@@ -10,14 +11,23 @@ export function WebhookTab() {
 
   const [webhookUrl, setWebhookUrl] = useState(settings.webhookUrl)
   const [branchName, setBranchName] = useState(settings.branchName ?? '')
+  const [recontactRaw, setRecontactRaw] = useState(
+    String(settings.recontactDays ?? RECONTACT_DAYS),
+  )
   const [showUrl, setShowUrl] = useState(false)
 
+  const recontactDays = parseRecontactDays(recontactRaw)
   const dirty =
     webhookUrl !== settings.webhookUrl ||
-    branchName !== (settings.branchName ?? '')
+    branchName !== (settings.branchName ?? '') ||
+    recontactDays !== (settings.recontactDays ?? RECONTACT_DAYS)
 
   const handleSave = () => {
-    void updateSettings({ webhookUrl: webhookUrl.trim(), branchName: branchName.trim() })
+    void updateSettings({
+      webhookUrl: webhookUrl.trim(),
+      branchName: branchName.trim(),
+      recontactDays,
+    })
   }
 
   // Mask URL for display when not editing.
@@ -107,6 +117,39 @@ export function WebhookTab() {
         />
       </Card>
 
+      <Card className="p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="rounded-sm bg-vegetal-soft text-vegetal p-1.5">
+            <CalendarClock size={16} />
+          </span>
+          <h3 className="text-md font-semibold text-ink">
+            Días de espera entre mensajes
+          </h3>
+        </div>
+        <p className="text-sm text-ink-soft mb-4">
+          Si esta sede ya le escribió a un cliente por el MISMO servicio hace
+          menos días que este número, la fila aparece desmarcada y no se le
+          envía otro mensaje (puedes forzarla desde la revisión). Un aviso de
+          un servicio distinto nunca queda bloqueado por otro.
+        </p>
+        <label className="text-sm text-ink-soft block mb-1.5">
+          Días de espera (1–90)
+        </label>
+        <Input
+          type="number"
+          min={1}
+          max={90}
+          value={recontactRaw}
+          onChange={(e) => setRecontactRaw(e.target.value)}
+          className="max-w-xs"
+        />
+        <p className="text-xs text-ink-mute mt-1.5">
+          Valor guardado para toda la clínica. Recomendado: 10–15 días. Ejemplo:
+          si pones 15, un cliente contactado por "Baño" hace 10 días no recibe
+          otro mensaje de Baño.
+        </p>
+      </Card>
+
       <div className="flex justify-end">
         <Button
           variant="primary"
@@ -120,4 +163,11 @@ export function WebhookTab() {
       </div>
     </div>
   )
+}
+
+/** Clamp the configured window to 1–90; fall back to the default. */
+function parseRecontactDays(raw: string): number {
+  const n = Number.parseInt(raw, 10)
+  if (Number.isNaN(n)) return RECONTACT_DAYS
+  return Math.min(90, Math.max(1, n))
 }

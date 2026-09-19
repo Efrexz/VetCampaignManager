@@ -9,6 +9,7 @@
  * and records `last_contacted_at` on every real dispatch.
  */
 import { newId } from '@/lib/id'
+import { normalizeCategoryName } from '@/lib/campaign'
 import { getJSON, setJSON } from './storage'
 import { KEYS } from './keys'
 import type { ContactState } from '@/lib/types'
@@ -20,12 +21,16 @@ interface ContactRecord {
   petName: string
   doNotContact: boolean
   lastContactedAt: string | null
+  /** Category name → ISO timestamp of the last send of that service. */
+  lastContacts: Record<string, string>
 }
 
 export interface ContactEntry {
   phone: string
   ownerName: string
   petName: string
+  /** Category that was just sent (recorded in the per-category ledger). */
+  category?: string
 }
 
 async function listContacts(): Promise<ContactRecord[]> {
@@ -42,6 +47,7 @@ export async function findContactStates(
     if (!wanted.has(c.phone)) continue
     states.set(c.phone, {
       lastContactedAt: c.lastContactedAt ?? undefined,
+      lastContacts: c.lastContacts,
       doNotContact: c.doNotContact,
     })
   }
@@ -59,6 +65,12 @@ export async function markContacted(entries: ContactEntry[]): Promise<void> {
       existing.ownerName = entry.ownerName || existing.ownerName
       existing.petName = entry.petName || existing.petName
       existing.lastContactedAt = now
+      if (entry.category) {
+        existing.lastContacts = {
+          ...existing.lastContacts,
+          [normalizeCategoryName(entry.category)]: now,
+        }
+      }
     } else {
       const record: ContactRecord = {
         id: newId(),
@@ -67,6 +79,9 @@ export async function markContacted(entries: ContactEntry[]): Promise<void> {
         petName: entry.petName,
         doNotContact: false,
         lastContactedAt: now,
+        lastContacts: entry.category
+          ? { [normalizeCategoryName(entry.category)]: now }
+          : {},
       }
       byPhone.set(record.phone, record)
     }

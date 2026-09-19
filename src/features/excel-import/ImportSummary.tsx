@@ -61,7 +61,7 @@ export function ImportSummary({ result, fileName, onReset }: Props) {
         />
         <Stat
           icon={<Copy size={14} />}
-          label="Duplicados"
+          label="Duplicados exactos"
           value={result.totals.duplicate}
           tone="warn"
         />
@@ -108,8 +108,9 @@ export function ImportSummary({ result, fileName, onReset }: Props) {
 
       <div className="flex items-center justify-between pt-2">
         <p className="text-xs text-ink-mute">
-          Los números repetidos no se enviarán dos veces. Los podrás revisar
-          en el siguiente paso.
+          Si un cliente tiene varias mascotas o servicios repetidos, se agrupan
+          en un solo mensaje por servicio — sin mensajes duplicados. Lo
+          revisas en detalle en el siguiente paso.
         </p>
         <Button
           variant="primary"

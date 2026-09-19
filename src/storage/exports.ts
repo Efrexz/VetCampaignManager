@@ -108,6 +108,7 @@ const settingsAdapter = {
       return {
         webhookUrl: c.webhookUrl,
         defaultCountryCode: '', // filled by settingsStore from tenant
+        recontactDays: c.recontactDays,
         hmacSecret: c.hmacSecret,
         branchName: c.branchName,
       }
@@ -120,6 +121,7 @@ const settingsAdapter = {
         webhookUrl: s.webhookUrl,
         hmacSecret: s.hmacSecret ?? '',
         branchName: s.branchName ?? '',
+        recontactDays: s.recontactDays,
       })
       return s
     }

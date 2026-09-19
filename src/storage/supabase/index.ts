@@ -8,6 +8,7 @@
  * scoped to tenants the current user belongs to.
  */
 import { newId } from '@/lib/id'
+import { normalizeCategoryName, RECONTACT_DAYS } from '@/lib/campaign'
 import { stripPayloadMedia } from '../campaigns'
 import { requireSupabase } from '@/integrations/supabase'
 import { useTenantStore } from '@/shared/stores/tenantStore'
@@ -23,6 +24,8 @@ export interface ContactEntry {
   phone: string
   ownerName: string
   petName: string
+  /** Category that was just sent (recorded in the per-category ledger). */
+  category?: string
 }
 
 export interface DeliveryEntry {
@@ -40,6 +43,29 @@ function tenantId(): string {
     throw new Error('No hay tenant activo. Inicia sesión y selecciona una clínica.')
   }
   return id
+}
+
+/**
+ * True when the query failed because a column does not exist yet (PostgREST
+ * PGRST204 / PGRST201 / SQLSTATE 42703). Used to tolerate deploys that land
+ * before migration 0007 is executed: the affected feature degrades to its
+ * default instead of breaking hydration or the send flow.
+ */
+function isMissingColumn(
+  err: { message?: string; code?: string } | null,
+  column: string,
+): boolean {
+  if (!err) return false
+  if (err.code === 'PGRST204' || err.code === 'PGRST201' || err.code === '42703') {
+    return true
+  }
+  const msg = err.message ?? ''
+  return (
+    msg.includes(column) &&
+    (msg.includes('does not exist') ||
+      msg.includes('Could not find') ||
+      msg.includes('schema cache'))
+  )
 }
 
 /**
@@ -250,35 +276,79 @@ export interface ClinicSettings {
   hmacSecret: string
   /** Current branch name, so the UI can label what it is configuring. */
   branchName: string
+  /** Re-contact window in days (clinic-wide; stored on the branch row). */
+  recontactDays: number
 }
 
 export async function getSettings(): Promise<ClinicSettings> {
   const sb = requireSupabase()
   const { data, error } = await sb
     .from('branches')
-    .select('webhook_url, hmac_secret, name')
+    .select('webhook_url, hmac_secret, name, recontact_days')
     .eq('id', branchId())
     .maybeSingle()
+  // Migration 0007 not applied yet → fall back to the legacy select so the
+  // app still boots (the window simply stays at its default until 0007 runs).
+  if (error && isMissingColumn(error, 'recontact_days')) {
+    console.warn(
+      'branches.recontact_days missing — run supabase/migrations/0007. Using default window.',
+    )
+    const legacy = await sb
+      .from('branches')
+      .select('webhook_url, hmac_secret, name')
+      .eq('id', branchId())
+      .maybeSingle()
+    if (legacy.error) throw legacy.error
+    return {
+      webhookUrl: legacy.data?.webhook_url ?? '',
+      hmacSecret: legacy.data?.hmac_secret ?? '',
+      branchName: legacy.data?.name ?? '',
+      recontactDays: RECONTACT_DAYS,
+    }
+  }
   if (error) throw error
-  if (!data) return { webhookUrl: '', hmacSecret: '', branchName: '' }
+  if (!data) {
+    return {
+      webhookUrl: '',
+      hmacSecret: '',
+      branchName: '',
+      recontactDays: RECONTACT_DAYS,
+    }
+  }
   return {
     webhookUrl: data.webhook_url,
     hmacSecret: data.hmac_secret,
     branchName: data.name,
+    recontactDays:
+      typeof data.recontact_days === 'number' && data.recontact_days > 0
+        ? data.recontact_days
+        : RECONTACT_DAYS,
   }
 }
 
 export async function saveSettings(s: ClinicSettings): Promise<ClinicSettings> {
   const sb = requireSupabase()
-  const { error } = await sb
+  const update = {
+    webhook_url: s.webhookUrl,
+    hmac_secret: s.hmacSecret,
+    recontact_days: s.recontactDays,
+    // Renaming the sede from Settings is allowed (owner/admin only by RLS).
+    ...(s.branchName.trim() ? { name: s.branchName.trim() } : {}),
+  }
+  let { error } = await sb
     .from('branches')
-    .update({
+    .update(update)
+    .eq('id', branchId())
+  // Column not migrated yet: persist the rest, skip the window silently.
+  if (error && isMissingColumn(error, 'recontact_days')) {
+    console.warn('branches.recontact_days missing — skipping window save.')
+    const legacy = {
       webhook_url: s.webhookUrl,
       hmac_secret: s.hmacSecret,
-      // Renaming the sede from Settings is allowed (owner/admin only by RLS).
       ...(s.branchName.trim() ? { name: s.branchName.trim() } : {}),
-    })
-    .eq('id', branchId())
+    }
+    ;({ error } = await sb.from('branches').update(legacy).eq('id', branchId()))
+  }
   if (error) throw error
   return s
 }
@@ -302,14 +372,35 @@ export async function findContactStates(
   const sb = requireSupabase()
   const { data, error } = await sb
     .from('contacts')
-    .select('phone, last_contacted_at, do_not_contact')
+    .select('phone, last_contacted_at, last_contacts, do_not_contact')
     .eq('branch_id', branchId())
     .in('phone', phones)
+  if (error && isMissingColumn(error, 'last_contacts')) {
+    console.warn(
+      'contacts.last_contacts missing — run supabase/migrations/0007. Falling back to legacy ledger.',
+    )
+    const legacy = await sb
+      .from('contacts')
+      .select('phone, last_contacted_at, do_not_contact')
+      .eq('branch_id', branchId())
+      .in('phone', phones)
+    if (legacy.error) throw legacy.error
+    const states = new Map<string, ContactState>()
+    for (const row of legacy.data ?? []) {
+      states.set(row.phone, {
+        lastContactedAt: row.last_contacted_at ?? undefined,
+        doNotContact: row.do_not_contact,
+      })
+    }
+    return states
+  }
   if (error) throw error
   const states = new Map<string, ContactState>()
   for (const row of data ?? []) {
     states.set(row.phone, {
       lastContactedAt: row.last_contacted_at ?? undefined,
+      lastContacts:
+        (row.last_contacts as Record<string, string> | null) ?? undefined,
       doNotContact: row.do_not_contact,
     })
   }
@@ -327,14 +418,46 @@ export async function markContacted(entries: ContactEntry[]): Promise<void> {
   // Two-step instead of upsert: an upsert would overwrite the primary key
   // (nanoid) on every send, breaking future joins (replies, contact history).
   // Select what exists → update those, insert the rest with fresh ids.
-  const { data: existing, error: selErr } = await sb
+  // Migration 0007 not applied → the editor degrades to the legacy ledger
+  // (last_contacted_at only) instead of failing the whole send flow.
+  const existingRow = await sb
     .from('contacts')
-    .select('id, phone')
+    .select('id, phone, last_contacts')
     .eq('branch_id', bid)
     .in('phone', phones)
-  if (selErr) throw selErr
+  let legacyLedger = false
+  let existingRows: Array<{ id: string; phone: string; last_contacts: unknown }>
+  if (existingRow.error && isMissingColumn(existingRow.error, 'last_contacts')) {
+    console.warn('contacts.last_contacts missing — legacy ledger write.')
+    legacyLedger = true
+    const legacy = await sb
+      .from('contacts')
+      .select('id, phone')
+      .eq('branch_id', bid)
+      .in('phone', phones)
+    if (legacy.error) throw legacy.error
+    existingRows = (legacy.data ?? []).map((r) => ({
+      id: r.id as string,
+      phone: r.phone as string,
+      last_contacts: undefined as unknown,
+    }))
+  } else if (existingRow.error) {
+    throw existingRow.error
+  } else {
+    existingRows = existingRow.data ?? []
+  }
 
-  const existingByPhone = new Map((existing ?? []).map((r) => [r.phone, r.id]))
+  const existingByPhone = new Map(
+    existingRows.map((r) => [
+      r.phone,
+      {
+        id: r.id,
+        lastContacts: legacyLedger
+          ? {}
+          : ((r.last_contacts as Record<string, string> | null) ?? {}),
+      },
+    ]),
+  )
 
   const toInsert = entries
     .filter((e) => !existingByPhone.has(e.phone))
@@ -346,24 +469,52 @@ export async function markContacted(entries: ContactEntry[]): Promise<void> {
       owner_name: e.ownerName,
       pet_name: e.petName,
       last_contacted_at: now,
+      ...(legacyLedger
+        ? {}
+        : {
+            last_contacts: e.category
+              ? { [normalizeCategoryName(e.category)]: now }
+              : {},
+          }),
     }))
   if (toInsert.length > 0) {
-    const { error: insErr } = await sb.from('contacts').insert(toInsert)
+    let { error: insErr } = await sb.from('contacts').insert(toInsert)
+    if (insErr && isMissingColumn(insErr, 'last_contacts')) {
+      legacyLedger = true
+      const stripped: Array<Record<string, unknown>> = toInsert.map((row) => {
+        const rest = { ...row } as Record<string, unknown>
+        delete rest.last_contacts
+        return rest
+      })
+      ;({ error: insErr } = await sb.from('contacts').insert(stripped))
+    }
     if (insErr) throw insErr
   }
 
   const toUpdate = entries.filter((e) => existingByPhone.has(e.phone))
   for (const e of toUpdate) {
-    // Per-row update: keeps owner/pet names fresh and stamps the contact time.
-    // (Volume is small — one campaign's recipients — so N updates are fine.)
+    // Per-row update: keeps owner/pet names fresh, stamps the contact time,
+    // and records the per-category ledger entry (migration 0007).
+    const prev = existingByPhone.get(e.phone)
+    const update = {
+      owner_name: e.ownerName,
+      pet_name: e.petName,
+      last_contacted_at: now,
+      ...(legacyLedger
+        ? {}
+        : {
+            last_contacts: {
+              ...(prev?.lastContacts ?? {}),
+              ...(e.category
+                ? { [normalizeCategoryName(e.category)]: now }
+                : {}),
+            },
+          }),
+    }
     const { error: updErr } = await sb
       .from('contacts')
-      .update({
-        owner_name: e.ownerName,
-        pet_name: e.petName,
-        last_contacted_at: now,
-      })
-      .eq('id', existingByPhone.get(e.phone))
+      .update(update)
+      .eq('id', prev?.id)
     if (updErr) throw updErr
   }
 }

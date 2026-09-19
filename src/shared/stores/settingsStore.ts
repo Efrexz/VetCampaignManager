@@ -26,7 +26,7 @@ import {
   makeCategory,
   makeTemplate,
 } from '@/storage/exports'
-import { resolveTemplateByCategoryName } from '@/lib/campaign'
+import { resolveTemplateByCategoryName, RECONTACT_DAYS } from '@/lib/campaign'
 import type { AppSettings, Category, MessageTemplate } from '@/lib/types'
 
 interface SettingsState {
@@ -59,6 +59,7 @@ interface SettingsState {
 const EMPTY_SETTINGS: AppSettings = {
   webhookUrl: '',
   defaultCountryCode: APP.defaultCountryCode,
+  recontactDays: RECONTACT_DAYS,
   branchName: '',
 }
 
@@ -90,6 +91,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       defaultCountryCode: HAS_SUPABASE
         ? (currentTenant?.defaultCountryCode ?? APP.defaultCountryCode)
         : (rawSettings as AppSettings).defaultCountryCode,
+      recontactDays:
+        typeof rawSettings.recontactDays === 'number' &&
+        rawSettings.recontactDays > 0
+          ? rawSettings.recontactDays
+          : RECONTACT_DAYS,
       hmacSecret: rawSettings.hmacSecret,
       branchName: (rawSettings as AppSettings).branchName ?? '',
     }
@@ -199,6 +205,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const persisted: AppSettings = {
       webhookUrl: next.webhookUrl,
       defaultCountryCode: next.defaultCountryCode,
+      recontactDays:
+        typeof next.recontactDays === 'number' && next.recontactDays > 0
+          ? next.recontactDays
+          : RECONTACT_DAYS,
       hmacSecret: next.hmacSecret,
       branchName: next.branchName ?? '',
     }

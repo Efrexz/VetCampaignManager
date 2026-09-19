@@ -14,6 +14,8 @@ export type PhoneStatus = 'valid' | 'invalid' | 'duplicate'
 export interface ContactState {
   /** ISO timestamp of the last campaign this branch sent to the phone. */
   lastContactedAt?: string
+  /** Category name → ISO timestamp of the last send of that service. */
+  lastContacts?: Record<string, string>
   doNotContact: boolean
 }
 
@@ -35,6 +37,43 @@ export interface Recipient {
   issue?: string
   /** Contact ledger state (attached after import when the phone is known). */
   contactState?: ContactState
+}
+
+// ── Grouping (phone + category message groups) ───────────────────────────────
+
+/**
+ * A sendable message unit: one phone + one category, with all the pets that
+ * share it. Built by `groupRecipients` after validation; each group renders
+ * exactly one WhatsApp message (with its category's template + image).
+ */
+export interface RecipientGroup {
+  /** Stable id: phone + normalized category (deterministic for tests). */
+  id: string
+  /** E.164-like normalized phone shared by every recipient in the group. */
+  phone: string
+  /** Owner name of the first recipient in file order. */
+  owner: string
+  /** Category as written in the Excel (first spelling seen). */
+  category: string
+  /** Unique pet names in file order — feeds the {{pets}} template variable. */
+  pets: string[]
+  /** Underlying recipients, file order. */
+  recipients: Recipient[]
+  /**
+   * Human-readable notes about rows folded into this group that will NOT be
+   * sent (e.g. same pet already covered by another service).
+   */
+  notes: string[]
+}
+
+/** Result of grouping the valid rows of an import. */
+export interface GroupingResult {
+  /** One group per phone+category, in stable file order. */
+  groups: RecipientGroup[]
+  /** Rows discarded as exact duplicates (phone + pet + category seen before). */
+  exactDuplicateRows: number
+  /** Rows folded into a group but not sent (pet's service already covered). */
+  deferredRows: number
 }
 
 export interface ImportError {
@@ -112,6 +151,11 @@ export interface AppSettings {
   webhookUrl: string
   /** Default country code for phone normalization, e.g. "+51" (Peru). */
   defaultCountryCode: string
+  /**
+   * Re-contact window in days: a recipient contacted for the SAME category
+   * within this window is excluded by default. Clinic-wide setting.
+   */
+  recontactDays: number
   /** HMAC secret for signing n8n payloads. Supabase mode only. */
   hmacSecret?: string
   /**

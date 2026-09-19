@@ -22,8 +22,6 @@ export interface ValidationInput {
     rawPhone: string
     category: string
   }>
-  /** Optional set of normalized phones already seen (for cross-call dedup). */
-  seenPhones?: Set<string>
   /**
    * Country code passed to phone normalization. Defaults to APP.defaultCountryCode.
    * The MVP only validates Peru mobile shape (9 digits, leading 9).
@@ -32,7 +30,6 @@ export interface ValidationInput {
 }
 
 export function validateRecipients(input: ValidationInput): ImportResult {
-  const seen = input.seenPhones ? new Set(input.seenPhones) : new Set<string>()
   const recipients: Recipient[] = []
   const categoryMap = new Map<string, number>()
   const countryCode = input.countryCode ?? APP.defaultCountryCode
@@ -50,12 +47,10 @@ export function validateRecipients(input: ValidationInput): ImportResult {
         issue = 'Teléfono no válido (se necesita un celular de 9 dígitos que empiece con 9)'
       }
       phoneStatus = 'invalid'
-    } else if (seen.has(normalized)) {
-      phoneStatus = 'duplicate'
-      issue = 'Teléfono duplicado'
     } else {
+      // Repeated phones are VALID on every row: grouping folds them into one
+      // message per phone+category. No more "duplicate" flagging here.
       phoneStatus = 'valid'
-      seen.add(normalized)
     }
 
     const recipient: Recipient = {
@@ -85,7 +80,9 @@ export function validateRecipients(input: ValidationInput): ImportResult {
     totalRows: recipients.length,
     valid: recipients.filter((r) => r.phoneStatus === 'valid').length,
     invalid: recipients.filter((r) => r.phoneStatus === 'invalid').length,
-    duplicate: recipients.filter((r) => r.phoneStatus === 'duplicate').length,
+    // Phone repeats are now folded by grouping; the legacy 'duplicate'
+    // status is always 0 at import time (kept for payload compatibility).
+    duplicate: 0,
   }
 
   return {

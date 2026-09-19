@@ -15,11 +15,11 @@ import { useCampaignStore } from '@/shared/stores/campaignStore'
 import { useSettingsStore } from '@/shared/stores/settingsStore'
 import { useAuth } from '@/shared/hooks/useAuth'
 import {
-  buildCampaignPayload,
-  buildSendableRecipients,
-  defaultEnabledFor,
+  buildGroupPayload,
+  buildSendableGroups,
   type N8nCampaignPayload,
 } from '@/lib/campaign'
+import { groupRecipients, joinPetNames } from '@/lib/grouping'
 import { newId } from '@/lib/id'
 import { maskUrl } from '@/lib/format'
 import { sendCampaign } from '@/integrations/n8n'
@@ -54,45 +54,50 @@ export function SendCampaign() {
   /** Timestamp captured at the moment the webhook replied OK. */
   const [sentAt, setSentAt] = useState<Date | null>(null)
 
-  // Build the sendable list + payload up front (memoized).
-  const sendable = useMemo(() => {
-    if (!result) return []
-    return buildSendableRecipients(
-      result.recipients,
+  // Build the sendable groups + payload up front (memoized).
+  const grouped = useMemo(
+    () => (result ? groupRecipients(result.recipients) : null),
+    [result],
+  )
+  const sendableGroups = useMemo(() => {
+    if (!grouped) return []
+    return buildSendableGroups(
+      grouped.groups,
       categories,
       templates,
       recipientEnabled,
+      settings.recontactDays,
     )
-  }, [result, categories, templates, recipientEnabled])
+  }, [grouped, categories, templates, recipientEnabled, settings.recontactDays])
 
   // Build a preview payload (never sent if user cancels).
   const previewPayload = useMemo<N8nCampaignPayload | null>(() => {
-    if (sendable.length === 0) return null
-    return buildCampaignPayload(sendable, {
+    if (sendableGroups.length === 0) return null
+    return buildGroupPayload(sendableGroups, {
       campaignId: newId(),
       schema: 'vetcampaign/v1',
       source: 'VetCampaignManager',
     })
-  }, [sendable])
+  }, [sendableGroups])
 
   const categoryCounts = useMemo(() => {
     const m = new Map<string, number>()
-    for (const { recipient } of sendable) {
-      m.set(recipient.category, (m.get(recipient.category) ?? 0) + 1)
+    for (const { group } of sendableGroups) {
+      m.set(group.category, (m.get(group.category) ?? 0) + 1)
     }
     return [...m.entries()]
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
-  }, [sendable])
+  }, [sendableGroups])
 
   const missingTemplates = useMemo(
-    () => sendable.some(({ message }) => !message.template),
-    [sendable],
+    () => sendableGroups.some(({ message }) => !message.template),
+    [sendableGroups],
   )
 
   const withMediaCount = useMemo(
-    () => sendable.filter(({ message }) => message.template?.media).length,
-    [sendable],
+    () => sendableGroups.filter(({ message }) => message.template?.media).length,
+    [sendableGroups],
   )
 
   // Guard: redirect back if no campaign or no sendable recipients.
@@ -102,11 +107,11 @@ export function SendCampaign() {
       navigate('/campaign', { replace: true })
       return
     }
-    if (sendable.length === 0 && status !== 'success') {
+    if (sendableGroups.length === 0 && status !== 'success') {
       toast.error('No hay destinatarios habilitados. Vuelve a la revisión.')
       navigate('/campaign/preview', { replace: true })
     }
-  }, [result, sendable.length, navigate, status])
+  }, [result, sendableGroups.length, navigate, status])
 
   if (!result) return null
 
@@ -124,12 +129,14 @@ export function SendCampaign() {
     setPayload(previewPayload)
     const res = await sendCampaign(previewPayload, settings.webhookUrl)
     const totals = result.totals
-    // Valid recipients the receptionist turned off before sending.
-    const excludedCount = result.recipients.filter(
-      (r) =>
-        r.phoneStatus === 'valid' &&
-        !(recipientEnabled[r.id] ?? defaultEnabledFor(r)),
-    ).length
+    // Valid rows never actually messaged: disabled groups and services
+    // folded into another message (deferred). Sent rows = recipients of
+    // dispatched groups.
+    const sentRows = sendableGroups.reduce(
+      (n, { group }) => n + group.recipients.length,
+      0,
+    )
+    const excludedCount = Math.max(0, totals.valid - sentRows)
 
     // Audit entry is independent — fire and forget.
     void recordAudit({
@@ -138,7 +145,7 @@ export function SendCampaign() {
       entityType: 'campaign',
       entityId: previewPayload.campaign.id,
       metadata: {
-        recipientCount: sendable.length,
+        recipientCount: sendableGroups.length,
         mock: res.mock,
         ok: res.ok,
         status: res.status,
@@ -158,9 +165,9 @@ export function SendCampaign() {
         id: previewPayload.campaign.id,
         sentBy: auth.userId,
         totalRecipients: totals.totalRows,
-        enabledRecipients: sendable.length,
+        enabledRecipients: sendableGroups.length,
         invalidRecipients: totals.invalid,
-        duplicateRecipients: totals.duplicate,
+        duplicateRecipients: grouped?.exactDuplicateRows ?? totals.duplicate,
         excludedRecipients: excludedCount,
         mock: res.mock,
         branch: settings.branchName,
@@ -174,11 +181,16 @@ export function SendCampaign() {
           (r) => ({ recipientId: r.id, phone: r.phone }),
         )
         await recordDeliveries(previewPayload.campaign.id, deliveryEntries)
-        const contactEntries: ContactEntry[] = sendable.map(({ recipient }) => ({
-          phone: recipient.normalizedPhone ?? recipient.rawPhone,
-          ownerName: recipient.owner,
-          petName: recipient.pet,
-        }))
+        // Ledger: one entry per message group, stamped with the category so
+        // the per-category re-contact guard works (migration 0007).
+        const contactEntries: ContactEntry[] = sendableGroups.map(
+          ({ group }) => ({
+            phone: group.phone,
+            ownerName: group.owner,
+            petName: joinPetNames(group.pets),
+            category: group.category,
+          }),
+        )
         await markContacted(contactEntries)
       }
     })().catch((err) => {
@@ -299,7 +311,7 @@ export function SendCampaign() {
             size="sm"
             icon={<Users size={14} />}
             label="Destinatarios"
-            value={sendable.length}
+            value={sendableGroups.length}
             tone="vegetal"
           />
           <Stat
@@ -386,7 +398,7 @@ export function SendCampaign() {
             variant="primary"
             size="lg"
             onClick={() => setConfirmOpen(true)}
-            disabled={status === 'sending' || sendable.length === 0}
+            disabled={status === 'sending' || sendableGroups.length === 0}
           >
             {status === 'sending' ? 'Enviando…' : 'Enviar campaña'}
             <Send size={16} />
@@ -400,8 +412,8 @@ export function SendCampaign() {
         onClose={() => setConfirmOpen(false)}
         title="¿Confirmar envío?"
         description={
-          sendable.length > 0
-            ? `Se enviarán ${sendable.length} mensaje(s) de WhatsApp. Esta acción no se puede deshacer.`
+          sendableGroups.length > 0
+            ? `Se enviarán ${sendableGroups.length} mensaje(s) de WhatsApp. Esta acción no se puede deshacer.`
             : ''
         }
         footer={

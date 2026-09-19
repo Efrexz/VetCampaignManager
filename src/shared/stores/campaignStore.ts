@@ -7,6 +7,7 @@
  */
 import { create } from 'zustand'
 import { defaultEnabledFor } from '@/lib/campaign'
+import { useSettingsStore } from './settingsStore'
 import type { ImportResult, Recipient } from '@/lib/types'
 
 export type CampaignPhase = 'import' | 'preview' | 'send'
@@ -17,8 +18,9 @@ interface CampaignState {
   result: ImportResult | null
   /**
    * Per-recipient enable override. Initialized to defaults when a result is
-   * set: valid→true, duplicates/invalid→false. The receptionist toggles rows
-   * in the preview. Only "enabled" recipients are sent.
+   * set: valid→true, invalid→false, recently contacted (same category)→false.
+   * The receptionist toggles rows in the preview. Only "enabled" recipients
+   * are sent.
    */
   recipientEnabled: Record<string, boolean>
   /** Currently selected recipient id (drives the right-side preview panel). */
@@ -33,9 +35,10 @@ interface CampaignState {
 }
 
 function initialEnabled(recipients: Recipient[]): Record<string, boolean> {
+  const { recontactDays } = useSettingsStore.getState().settings
   const map: Record<string, boolean> = {}
   for (const r of recipients) {
-    map[r.id] = defaultEnabledFor(r)
+    map[r.id] = defaultEnabledFor(r, recontactDays)
   }
   return map
 }
@@ -69,11 +72,12 @@ export const useCampaignStore = create<CampaignState>((set) => ({
       // Locked exclusions: invalid phones and branch-level "NO CONTACTAR".
       // Recently-contacted phones CAN be force-enabled (manual override).
       if (r.phoneStatus === 'invalid' || r.contactState?.doNotContact) return s
+      const { recontactDays } = useSettingsStore.getState().settings
       return {
         recipientEnabled: {
           ...s.recipientEnabled,
           [id]: !(
-            s.recipientEnabled[id] ?? defaultEnabledFor(r)
+            s.recipientEnabled[id] ?? defaultEnabledFor(r, recontactDays)
           ),
         },
       }

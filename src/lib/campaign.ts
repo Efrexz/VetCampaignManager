@@ -4,12 +4,19 @@
  * No React, no storage, no network. Reused by the campaign preview (Phase 3)
  * and the n8n payload builder (Phase 4).
  */
-import type { Category, MessageTemplate, Recipient } from '@/lib/types'
+import type {
+  Category,
+  MessageTemplate,
+  Recipient,
+  RecipientGroup,
+} from '@/lib/types'
 import {
   contextFromRecipient,
   renderTemplate,
+  type RenderContext,
   type RenderResult,
 } from '@/lib/template'
+import { joinPetNames } from '@/lib/grouping'
 
 /**
  * Normalize a category-like string for tolerant matching:
@@ -91,11 +98,12 @@ export function renderMessageForRecipient(
 }
 
 /**
- * Re-contact window: a phone contacted within the last N days is excluded by
- * default (branch-scoped — contacts are per sede). Configurable later via
- * settings if the business needs a different cadence.
+ * Re-contact window: a phone contacted for the SAME category within the last
+ * N days is excluded by default (branch-scoped — contacts are per sede).
+ * The window is clinic-configurable (`AppSettings.recontactDays`, stored on
+ * the branch row in Supabase mode); this constant is only the fallback.
  */
-export const RECONTACT_DAYS = 7
+export const RECONTACT_DAYS = 10
 
 /** Whole days elapsed since the ISO instant, in the browser's timezone. */
 export function daysSince(iso: string, now = new Date()): number | null {
@@ -105,28 +113,54 @@ export function daysSince(iso: string, now = new Date()): number | null {
 }
 
 /**
- * True when the recipient should be excluded by default for contact-ledger
- * reasons (branch-scoped): the branch contacted them within the re-contact
- * window, or someone flagged them "NO CONTACTAR".
+ * True when this branch contacted the phone for THIS category within the
+ * re-contact window. Rows recorded before migration 0007 (no per-category
+ * ledger yet) fall back to the overall last-contact date — conservative:
+ * better one extra block than an accidental duplicate message.
  */
-export function recentlyContacted(recipient: Recipient, now = new Date()): boolean {
-  const last = recipient.contactState?.lastContactedAt
-  if (!last) return false
-  const days = daysSince(last, now)
-  return days !== null && days < RECONTACT_DAYS
+export function recentlyContactedFor(
+  recipient: Recipient,
+  category: string,
+  recontactDays: number = RECONTACT_DAYS,
+  now = new Date(),
+): boolean {
+  const contact = recipient.contactState
+  if (!contact) return false
+  const withinWindow = (iso: string): boolean => {
+    const d = daysSince(iso, now)
+    return d !== null && d < recontactDays
+  }
+  const key = normalizeCategoryName(category)
+  const perCategory = contact.lastContacts
+  // Per-category ledger present (any entry) → trust it exclusively; an
+  // entry never means "contacted for everything", only for its own category.
+  if (perCategory && Object.keys(perCategory).length > 0) {
+    const last = perCategory[key]
+    return last ? withinWindow(last) : false
+  }
+  // Legacy fallback (window respected regardless of which category was sent).
+  if (contact.lastContactedAt) return withinWindow(contact.lastContactedAt)
+  return false
 }
 
 /**
  * Default "enabled" state per recipient:
  *   valid phones without ledger flags → on;
- *   duplicates and invalid phones → off (receptionist can toggle valid ones);
- *   recently contacted by this branch → off;
+ *   invalid phones → off (receptionist can toggle valid ones);
+ *   recently contacted by this branch (per category) → off;
  *   "NO CONTACTAR" → off, permanently.
  */
-export function defaultEnabledFor(recipient: Recipient, now = new Date()): boolean {
+export function defaultEnabledFor(
+  recipient: Recipient,
+  recontactDays: number = RECONTACT_DAYS,
+  now = new Date(),
+): boolean {
   if (recipient.phoneStatus !== 'valid') return false
   if (recipient.contactState?.doNotContact) return false
-  return !recentlyContacted(recipient, now)
+  if (recentlyContactedFor(recipient, recipient.category, recontactDays, now)) {
+    return false
+  }
+  return true
 }
 
 export interface SendableRecipient {
@@ -135,41 +169,90 @@ export interface SendableRecipient {
 }
 
 /**
- * Build the final list of recipients to actually send to, given the user's
- * enable/disable overrides. Used by the send screen (Phase 4) and the
- * preview's "to send" count.
+ * Render the message for a GROUP (phone + category) using its template.
+ * {{pets}} resolves to every pet in the group; {{pet}} stays the first one.
  */
-export function buildSendableRecipients(
-  recipients: Recipient[],
+export function renderMessageForGroup(
+  group: RecipientGroup,
+  categories: Category[],
+  templates: MessageTemplate[],
+): RecipientMessage {
+  const template = resolveTemplateByCategoryName(
+    group.category,
+    categories,
+    templates,
+  )
+  if (!template) {
+    return { text: '', unknown: [], empty: [] }
+  }
+  const first = group.recipients[0]
+  const ctx: RenderContext = {
+    owner: group.owner,
+    pet: group.pets[0] ?? first?.pet ?? '',
+    pets: joinPetNames(group.pets),
+    category: group.category,
+  }
+  const result: RenderResult = renderTemplate(template.body, ctx)
+  return {
+    text: result.text,
+    template,
+    unknown: result.unknown,
+    empty: result.empty,
+  }
+}
+
+/** One sendable message: a group + its rendered message. */
+export interface SendableGroup {
+  group: RecipientGroup
+  message: RecipientMessage
+}
+
+/**
+ * Build the sendable list from GROUPS, applying enable overrides (keyed by
+ * recipient id, mirroring the preview toggles) and the per-category contact
+ * guard.
+ *
+ * Override semantics: the window guard only shapes the DEFAULT state. A
+ * group the receptionist explicitly re-enabled (checkbox on after it started
+ * off) is sent even inside the re-contact window — matching the old
+ * "force-enable" behavior. Defaults are materialized by the store at import
+ * time, so `enabled[id] === true` on a default-off (blocked) group can only
+ * be a manual override.
+ */
+export function buildSendableGroups(
+  groups: RecipientGroup[],
   categories: Category[],
   templates: MessageTemplate[],
   enabled: Record<string, boolean>,
-): SendableRecipient[] {
-  const out: SendableRecipient[] = []
-  for (const r of recipients) {
-    const isOn = enabled[r.id] ?? defaultEnabledFor(r)
-    if (!isOn) continue
-    if (r.phoneStatus === 'invalid') continue
-    const message = renderMessageForRecipient(r, categories, templates)
+  recontactDays: number,
+  now = new Date(),
+): SendableGroup[] {
+  const out: SendableGroup[] = []
+  for (const group of groups) {
+    const anyEnabled = group.recipients.some(
+      (r) => enabled[r.id] ?? defaultEnabledFor(r, recontactDays, now),
+    )
+    if (!anyEnabled) continue
+    // Guard only blocks groups left on their default-off state.
+    const manuallyEnabled = group.recipients.some(
+      (r) => enabled[r.id] === true,
+    )
+    if (
+      !manuallyEnabled &&
+      recentlyContactedFor(
+        group.recipients[0],
+        group.category,
+        recontactDays,
+        now,
+      )
+    ) {
+      continue
+    }
+    const message = renderMessageForGroup(group, categories, templates)
     if (!message.template) continue
-    out.push({ recipient: r, message })
+    out.push({ group, message })
   }
   return out
-}
-
-/** Count by status (used by the preview header chips). */
-export function countByStatus(recipients: Recipient[]): {
-  total: number
-  valid: number
-  invalid: number
-  duplicate: number
-} {
-  return {
-    total: recipients.length,
-    valid: recipients.filter((r) => r.phoneStatus === 'valid').length,
-    invalid: recipients.filter((r) => r.phoneStatus === 'invalid').length,
-    duplicate: recipients.filter((r) => r.phoneStatus === 'duplicate').length,
-  }
 }
 
 // ── n8n payload contract ──────────────────────────────────────────────────────
@@ -231,12 +314,13 @@ export interface BuildPayloadOptions {
 }
 
 /**
- * Build the n8n webhook payload from a campaign session. Pure: takes the
- * already-built sendable list and freezes the envelope. The same function
- * can run later inside a Supabase edge function that signs the call.
+ * Build the n8n webhook payload from sendable GROUPS (phone + category).
+ * Wire contract unchanged: n8n/Evolution cannot tell the difference. The
+ * group id is the per-recipient id; `pet` carries the joined pet names
+ * ("Roco y Maxi") since that is what the message names.
  */
-export function buildCampaignPayload(
-  sendable: SendableRecipient[],
+export function buildGroupPayload(
+  sendable: SendableGroup[],
   opts: BuildPayloadOptions,
 ): N8nCampaignPayload {
   const media: Record<string, N8nMediaItem> = {}
@@ -260,12 +344,12 @@ export function buildCampaignPayload(
       source: opts.source ?? 'VetCampaignManager',
     },
     ...(hasMedia ? { media } : {}),
-    recipients: sendable.map(({ recipient, message }) => ({
-      id: recipient.id,
-      owner: recipient.owner,
-      pet: recipient.pet,
-      phone: recipient.normalizedPhone ?? recipient.rawPhone,
-      category: recipient.category,
+    recipients: sendable.map(({ group, message }) => ({
+      id: group.id,
+      owner: group.owner,
+      pet: joinPetNames(group.pets),
+      phone: group.phone,
+      category: group.category,
       message: message.text,
       ...(message.template?.media ? { mediaKey: message.template.id } : {}),
     })),

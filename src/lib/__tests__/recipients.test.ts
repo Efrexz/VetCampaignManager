@@ -14,7 +14,7 @@ describe('validateRecipients', () => {
     expect(result.totals.invalid).toBe(1)
   })
 
-  test('keeps first occurrence and flags later duplicates', () => {
+  test('keeps exact-duplicate rows valid — grouping discards them later', () => {
     const result = validateRecipients({
       rows: [
         {
@@ -35,18 +35,17 @@ describe('validateRecipients', () => {
     })
     expect(result.recipients.map((r) => r.phoneStatus)).toEqual([
       'valid',
-      'duplicate',
+      'valid',
     ])
     expect(result.totals).toEqual({
       totalRows: 2,
-      valid: 1,
+      valid: 2,
       invalid: 0,
-      duplicate: 1,
+      duplicate: 0,
     })
   })
 
-  test('respects an externally-provided seenPhones set', () => {
-    const seen = new Set<string>(['+51911111222'])
+  test('repeated phones stay valid — grouping folds them later', () => {
     const result = validateRecipients({
       rows: [
         {
@@ -56,11 +55,20 @@ describe('validateRecipients', () => {
           rawPhone: '+51 - 911111222',
           category: 'Vacuna',
         },
+        {
+          rowNumber: 3,
+          owner: 'A2',
+          pet: 'P2',
+          rawPhone: '+51 - 911111222',
+          category: 'Baño',
+        },
       ],
-      seenPhones: seen,
     })
-    expect(result.recipients[0].phoneStatus).toBe('duplicate')
-    expect(seen.has('+51911111222')).toBe(true)
+    expect(result.recipients.map((r) => r.phoneStatus)).toEqual([
+      'valid',
+      'valid',
+    ])
+    expect(result.totals.duplicate).toBe(0)
   })
 
   test('replaces blank categories with "Sin categoría"', () => {
