@@ -103,6 +103,16 @@ Current additions beyond the original MVP list:
   with a clear message when a required env var is missing or malformed,
   preventing silent production errors.
 
+## Release notes for receptionists (mandatory when relevant)
+`src/app/releaseNotes.ts` is the changelog clinic staff sees via the
+"Novedades" bell in the TopBar (plain, non-technical Spanish — no jargon).
+**Rule:** every deployment that affects how receptionists work (new feature,
+workflow change, or benefit them) adds ONE entry in `releaseNotes.ts` in the
+same commit — latest first, `relevant: true` to trigger the badge + one-time
+startup toast (badge/toast logic in `src/app/releaseVisibility.ts`, UI in
+`src/shared/components/layout/ReleaseNotesButton.tsx`). Unseen-tracking is
+localStorage-only (`vcm:releases:lastSeen:v1`) — never a database table.
+
 ## Folder map (quick ref)
 ```
 src/
