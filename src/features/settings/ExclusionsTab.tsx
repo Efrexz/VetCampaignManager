@@ -17,6 +17,7 @@ export function ExclusionsTab() {
   const countryCode = useSettingsStore((s) => s.settings.defaultCountryCode)
   const [rows, setRows] = useState<ContactExclusion[] | null>(null)
   const [phoneInput, setPhoneInput] = useState('')
+  const [nameInput, setNameInput] = useState('')
   const [noteInput, setNoteInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [search, setSearch] = useState('')
@@ -45,6 +46,7 @@ export function ExclusionsTab() {
       await setContactFlags(
         unique.map((phone) => ({
           phone,
+          ownerName: nameInput.trim() || undefined,
           note: noteInput.trim() || undefined,
           doNotContact: true,
         })),
@@ -55,6 +57,7 @@ export function ExclusionsTab() {
           : `${unique.length} teléfonos excluidos. No recibirán más mensajes en esta sede.`,
       )
       setPhoneInput('')
+      setNameInput('')
       setNoteInput('')
       load()
     } catch (err) {
@@ -81,7 +84,7 @@ export function ExclusionsTab() {
 
   const filtered = (rows ?? []).filter((r) => {
     if (!search.trim()) return true
-    const hay = `${r.phone} ${r.ownerName} ${r.petName} ${r.note ?? ''}`
+    const hay = `${r.phone} ${r.ownerName} ${r.note ?? ''}`
     return hay.toLowerCase().includes(search.trim().toLowerCase())
   })
 
@@ -147,7 +150,17 @@ export function ExclusionsTab() {
         </p>
 
         <label className="text-sm text-ink-soft block mb-1.5">
-          Nota (opcional) — motivo de la exclusión
+          Nombre del cliente (opcional)
+        </label>
+        <Input
+          value={nameInput}
+          onChange={(e) => setNameInput(e.target.value)}
+          placeholder="p. ej. Juan Pérez"
+          className="max-w-xs mb-3"
+        />
+
+        <label className="text-sm text-ink-soft block mb-1.5">
+          Motivo (opcional) — se ve al lado del sello rojo
         </label>
         <Input
           value={noteInput}
@@ -162,7 +175,7 @@ export function ExclusionsTab() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por teléfono o nota…"
+            placeholder="Buscar por teléfono, nombre o nota…"
             className="max-w-xs"
           />
           <span className="text-xs text-ink-mute">
@@ -181,9 +194,8 @@ export function ExclusionsTab() {
               <Thead className="bg-danger-soft/40">
                 <tr>
                   <Th>Número</Th>
-                  <Th>Dueño</Th>
-                  <Th>Mascota</Th>
-                  <Th>Nota</Th>
+                  <Th>Nombre</Th>
+                  <Th>Motivo</Th>
                   <Th />
                 </tr>
               </Thead>
@@ -197,7 +209,6 @@ export function ExclusionsTab() {
                       {row.phone}
                     </Td>
                     <Td className="text-ink-soft">{row.ownerName || '—'}</Td>
-                    <Td className="text-ink-soft">{row.petName || '—'}</Td>
                     <Td className="text-warn">{row.note || '—'}</Td>
                     <Td className="text-right">
                       <Button

@@ -56,6 +56,7 @@ export async function findContactStates(
       lastContactedAt: c.lastContactedAt ?? undefined,
       lastContacts: c.lastContacts,
       doNotContact: c.doNotContact,
+      ...(c.doNotContact ? { note: c.note } : {}),
     })
   }
   return states

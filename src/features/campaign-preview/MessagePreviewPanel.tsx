@@ -1,6 +1,7 @@
 import { useSettingsStore } from '@/shared/stores/settingsStore'
 import {
   AlertTriangle,
+  Ban,
   Image as ImageIcon,
   Info,
   MessageSquare,
@@ -161,6 +162,19 @@ export function MessagePreviewPanel({ group, onClose }: Props) {
           <span>
             Último envío a este teléfono:{' '}
             {lastContactDescription(contact, group.category)}
+          </span>
+        </div>
+      )}
+
+      {/* Exclusion banner: this client will never be messaged */}
+      {contact?.doNotContact && (
+        <div className="px-4 py-2.5 border-b border-mist bg-danger-soft/40 flex items-start gap-2 text-xs text-danger">
+          <Ban size={12} className="shrink-0 mt-0.5" />
+          <span>
+            <strong>Cliente vetado en esta sede</strong>
+            {contact.note ? ` — ${contact.note}` : ''}. No recibirá mensajes
+            aunque cargue el Excel; quítalo en Ajustes → Clientes excluidos si
+            fue un error.
           </span>
         </div>
       )}

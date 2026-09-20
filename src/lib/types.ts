@@ -17,6 +17,8 @@ export interface ContactState {
   /** Category name → ISO timestamp of the last send of that service. */
   lastContacts?: Record<string, string>
   doNotContact: boolean
+  /** Why this client is excluded (shown in the campaign review). */
+  note?: string
 }
 
 /** One excluded number as shown in the "Clientes excluidos" tab. */

@@ -372,31 +372,63 @@ export async function findContactStates(
 ): Promise<Map<string, ContactState>> {
   if (phones.length === 0) return new Map()
   const sb = requireSupabase()
-  const { data, error } = await sb
+
+  // First attempt: full ledger (0007 + 0008 columns). Degrades twice:
+  //   - no `note` (0008 missing) → retry without it, notes are cosmetic.
+  //   - no `last_contacts` (0007 missing) → legacy select, conservative guard.
+  let data:
+    | Array<{
+        phone: string
+        last_contacted_at: string | null
+        last_contacts: unknown
+        do_not_contact: boolean
+        note: string | null
+      }>
+    | null
+  const withNote = await sb
     .from('contacts')
-    .select('phone, last_contacted_at, last_contacts, do_not_contact')
+    .select('phone, last_contacted_at, last_contacts, do_not_contact, note')
     .eq('branch_id', branchId())
     .in('phone', phones)
-  if (error && isMissingColumn(error, 'last_contacts')) {
-    console.warn(
-      'contacts.last_contacts missing — run supabase/migrations/0007. Falling back to legacy ledger.',
-    )
-    const legacy = await sb
+  let noteAvailable = true
+  if (withNote.error && isMissingColumn(withNote.error, 'note')) {
+    console.warn('contacts.note missing — run supabase/migrations/0008. Notes hidden.')
+    noteAvailable = false
+    const withoutNote = await sb
       .from('contacts')
-      .select('phone, last_contacted_at, do_not_contact')
+      .select('phone, last_contacted_at, last_contacts, do_not_contact')
       .eq('branch_id', branchId())
       .in('phone', phones)
-    if (legacy.error) throw legacy.error
-    const states = new Map<string, ContactState>()
-    for (const row of legacy.data ?? []) {
-      states.set(row.phone, {
-        lastContactedAt: row.last_contacted_at ?? undefined,
-        doNotContact: row.do_not_contact,
-      })
+    if (withoutNote.error && isMissingColumn(withoutNote.error, 'last_contacts')) {
+      console.warn(
+        'contacts.last_contacts missing — run supabase/migrations/0007. Falling back to legacy ledger.',
+      )
+      const legacy = await sb
+        .from('contacts')
+        .select('phone, last_contacted_at, do_not_contact')
+        .eq('branch_id', branchId())
+        .in('phone', phones)
+      if (legacy.error) throw legacy.error
+      const states = new Map<string, ContactState>()
+      for (const row of legacy.data ?? []) {
+        states.set(row.phone, {
+          lastContactedAt: row.last_contacted_at ?? undefined,
+          doNotContact: row.do_not_contact,
+        })
+      }
+      return states
     }
-    return states
+    if (withoutNote.error) throw withoutNote.error
+    data = (withoutNote.data ?? []).map((row) => ({
+      ...row,
+      note: null as string | null,
+    }))
+  } else if (withNote.error) {
+    throw withNote.error
+  } else {
+    data = withNote.data
   }
-  if (error) throw error
+
   const states = new Map<string, ContactState>()
   for (const row of data ?? []) {
     states.set(row.phone, {
@@ -404,6 +436,9 @@ export async function findContactStates(
       lastContacts:
         (row.last_contacts as Record<string, string> | null) ?? undefined,
       doNotContact: row.do_not_contact,
+      ...(row.do_not_contact && noteAvailable
+        ? { note: row.note ?? undefined }
+        : {}),
     })
   }
   return states

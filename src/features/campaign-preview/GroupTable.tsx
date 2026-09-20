@@ -29,6 +29,9 @@ export interface GroupRow {
   lastContactAt?: string
   daysSinceContact: number | null
   blocked: boolean
+  /** Permanent exclusion: chip rojo, casilla bloqueada, nunca enviable. */
+  doNotContact: boolean
+  exclusionNote?: string
   noteCount: number
 }
 
@@ -65,10 +68,17 @@ export function GroupTable({ rows, selectedId, onSelect, onToggle }: Props) {
             <input
               type="checkbox"
               checked={r.enabled}
+              disabled={r.doNotContact}
               onChange={() => onToggle(r)}
               onClick={(e) => e.stopPropagation()}
-              className="accent-vegetal h-4 w-4 align-middle"
-              title={r.enabled ? 'Excluir del envío' : 'Incluir en el envío'}
+              className="accent-vegetal h-4 w-4 align-middle disabled:opacity-40 disabled:cursor-not-allowed"
+              title={
+                r.doNotContact
+                  ? 'Cliente vetado: se excluyó en Ajustes → Clientes excluidos. No se puede activar.'
+                  : r.enabled
+                    ? 'Excluir del envío'
+                    : 'Incluir en el envío'
+              }
             />
           )
         },
@@ -130,7 +140,24 @@ export function GroupTable({ rows, selectedId, onSelect, onToggle }: Props) {
           const r = row.original
           return (
             <span className="flex flex-wrap gap-1">
-              {r.blocked && (
+              {r.doNotContact && (
+                <Chip
+                  tone="danger"
+                  title={
+                    r.exclusionNote
+                      ? `Cliente vetado: ${r.exclusionNote}`
+                      : 'Cliente vetado en Ajustes → Clientes excluidos'
+                  }
+                >
+                  NO CONTACTAR
+                </Chip>
+              )}
+              {r.exclusionNote && (
+                <span className="text-2xs text-danger self-center max-w-[12rem] truncate">
+                  {r.exclusionNote}
+                </span>
+              )}
+              {!r.doNotContact && r.blocked && (
                 <Chip
                   tone="warn"
                   title="Ya se le escribió por este servicio hace pocos días (ventana configurable en Ajustes). Puedes forzar el envío si es necesario."
@@ -143,7 +170,7 @@ export function GroupTable({ rows, selectedId, onSelect, onToggle }: Props) {
                   por {r.category}
                 </Chip>
               )}
-              {!r.blocked && <Chip tone="vegetal">Listo</Chip>}
+              {!r.doNotContact && !r.blocked && <Chip tone="vegetal">Listo</Chip>}
               {r.noteCount > 0 && (
                 <Chip
                   tone="neutral"

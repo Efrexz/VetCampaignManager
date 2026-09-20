@@ -69,6 +69,7 @@ export function CampaignPreview() {
         (r) => recipientEnabled[r.id] ?? defaultEnabledFor(r, recontactDays),
       )
       const contact = primary.contactState
+      const doNotContact = contact?.doNotContact ?? false
       // Last relevant contact: this category if recorded, else the legacy
       // overall stamp (rows written before migration 0007).
       const hasPerCat =
@@ -88,6 +89,8 @@ export function CampaignPreview() {
         lastContactAt: last,
         daysSinceContact: days,
         blocked: recentlyContactedFor(primary, g.category, recontactDays),
+        doNotContact,
+        exclusionNote: doNotContact ? contact?.note : undefined,
         noteCount: g.notes.length,
       }
     })
