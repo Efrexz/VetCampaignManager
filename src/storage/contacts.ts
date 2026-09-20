@@ -3,16 +3,21 @@
  * localStorage mode is single-sede). Same signatures as the Supabase
  * implementation so the storage seam holds.
  *
- * The ledger answers two questions at import time:
- *   - has this branch contacted this phone recently? (re-contact guard)
- *   - is this phone flagged "NO CONTACTAR"?
- * and records `last_contacted_at` on every real dispatch.
+ * The ledger answers three questions at import time:
+ *   - has this branch contacted this phone for a category recently?
+ *     (re-contact guard, per-category via migration 0007)
+ *   - is this phone flagged "NO CONTACTAR" (exclusion list)?
+ * and records `last_contacted_at` + `last_contacts` on every real dispatch.
  */
 import { newId } from '@/lib/id'
 import { normalizeCategoryName } from '@/lib/campaign'
 import { getJSON, setJSON } from './storage'
 import { KEYS } from './keys'
-import type { ContactState } from '@/lib/types'
+import type {
+  ContactState,
+  ContactExclusion,
+  ContactFlagEntry,
+} from '@/lib/types'
 
 interface ContactRecord {
   id: string
@@ -23,6 +28,8 @@ interface ContactRecord {
   lastContactedAt: string | null
   /** Category name → ISO timestamp of the last send of that service. */
   lastContacts: Record<string, string>
+  /** Why this client is excluded (free text, shown in UI). */
+  note?: string
 }
 
 export interface ContactEntry {
@@ -87,4 +94,55 @@ export async function markContacted(entries: ContactEntry[]): Promise<void> {
     }
   }
   await setJSON(KEYS.contacts, [...byPhone.values()])
+}
+
+/**
+ * Toggle the per-phone "NO CONTACTAR" flag (exclusion list). Upserts the
+ * contact row when it does not exist yet; never touches the timestamps.
+ * One client with several phones → the caller passes one entry per phone
+ * (same note). Storage stays phone-keyed as the ledger demands.
+ */
+export async function setContactFlags(
+  entries: ContactFlagEntry[],
+): Promise<void> {
+  if (entries.length === 0) return
+  const list = await listContacts()
+  const byPhone = new Map(list.map((c) => [c.phone, c]))
+  for (const entry of entries) {
+    const existing = byPhone.get(entry.phone)
+    if (existing) {
+      existing.doNotContact = entry.doNotContact
+      if (entry.ownerName?.trim()) existing.ownerName = entry.ownerName.trim()
+      if (entry.petName?.trim()) existing.petName = entry.petName.trim()
+      if (entry.note?.trim()) existing.note = entry.note.trim()
+      if (!entry.doNotContact) existing.note = undefined
+    } else {
+      const record: ContactRecord = {
+        id: newId(),
+        phone: entry.phone,
+        ownerName: entry.ownerName?.trim() ?? '',
+        petName: entry.petName?.trim() ?? '',
+        doNotContact: entry.doNotContact,
+        lastContactedAt: null,
+        lastContacts: {},
+        note: entry.doNotContact ? entry.note?.trim() : undefined,
+      }
+      byPhone.set(record.phone, record)
+    }
+  }
+  await setJSON(KEYS.contacts, [...byPhone.values()])
+}
+
+/** Exclusion-list rows for the Settings tab, sorted by phone. */
+export async function listContactExclusions(): Promise<ContactExclusion[]> {
+  const list = await listContacts()
+  return list
+    .filter((c) => c.doNotContact)
+    .sort((a, b) => a.phone.localeCompare(b.phone))
+    .map((c) => ({
+      phone: c.phone,
+      ownerName: c.ownerName,
+      petName: c.petName,
+      note: c.note,
+    }))
 }

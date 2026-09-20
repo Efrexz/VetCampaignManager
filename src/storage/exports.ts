@@ -36,6 +36,8 @@ import {
 import {
   findContactStates as findContactStatesLocal,
   markContacted as markContactedLocal,
+  setContactFlags as setContactFlagsLocal,
+  listContactExclusions as listContactExclusionsLocal,
 } from './contacts'
 import type { ContactEntry, DeliveryEntry } from './supabase'
 
@@ -149,7 +151,11 @@ export const seedIfEmpty = () =>
 export type { CampaignRecord, CampaignDraft } from '@/lib/types'
 export type { AuditEntry, ContactEntry, DeliveryEntry } from './supabase'
 import type { AuditEntry } from './supabase'
-import type { ContactState } from '@/lib/types'
+import type {
+  ContactState,
+  ContactExclusion,
+  ContactFlagEntry,
+} from '@/lib/types'
 
 const noopRecordAudit = async () => {}
 const emptyAudit = async (): Promise<AuditEntry[]> => []
@@ -169,6 +175,16 @@ export const findContactStates: (
 export const markContacted: (entries: ContactEntry[]) => Promise<void> = pick(
   markContactedLocal,
   supabaseStorage.markContacted,
+)
+
+// ── Exclusion list ("NO CONTACTAR" management, Settings tab, both backends) ──
+
+export const setContactFlags: (
+  entries: ContactFlagEntry[],
+) => Promise<void> = pick(setContactFlagsLocal, supabaseStorage.setContactFlags)
+export const listContactExclusions: () => Promise<ContactExclusion[]> = pick(
+  listContactExclusionsLocal,
+  supabaseStorage.listContactExclusions,
 )
 
 // ── Delivery reports (Supabase only — local mode keeps counters on the

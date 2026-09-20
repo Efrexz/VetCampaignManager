@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Mail, Loader2, PawPrint, LogIn } from 'lucide-react'
+import { Mail, Loader2, PawPrint, LogIn, UserCog } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Card, Input } from '@/shared/components/ui'
 import { APP } from '@/app/env'
@@ -12,7 +12,11 @@ export function Login() {
   const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [mode, setMode] = useState<'signin' | 'signup' | 'magic'>('signin')
+  // Self-signup is disabled on purpose: this is a multi-tenant SaaS top —
+  // a self-created user would have no tenant/branch membership and would
+  // hit "No hay sede activa". Accounts are created by the clinic owner in
+  // the Supabase dashboard (or previewed manually during onboarding).
+  const [mode, setMode] = useState<'signin' | 'magic'>('signin')
   const [busy, setBusy] = useState(false)
   const auth = useAuth()
 
@@ -47,14 +51,8 @@ export function Login() {
     setBusy(true)
     try {
       const sb = requireSupabase()
-      if (mode === 'signup') {
-        const { error } = await sb.auth.signUp({ email, password })
-        if (error) throw error
-        toast.success('Cuenta creada. Revisa tu correo si requiere confirmación.')
-      } else {
-        const { error } = await sb.auth.signInWithPassword({ email, password })
-        if (error) throw error
-      }
+      const { error } = await sb.auth.signInWithPassword({ email, password })
+      if (error) throw error
       const from = (location.state as { from?: string } | null)?.from ?? '/'
       navigate(from, { replace: true })
     } catch (err) {
@@ -113,7 +111,7 @@ export function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 className="mt-1"
-                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                autoComplete="current-password"
               />
             </label>
           )}
@@ -128,28 +126,36 @@ export function Login() {
           ) : (
             <Button variant="primary" size="md" onClick={handleEmailPassword} disabled={busy || !email || !password}>
               {busy ? <Loader2 className="animate-spin" size={14} /> : <LogIn size={14} />}
-              {mode === 'signup' ? 'Crear cuenta' : 'Iniciar sesión'}
+              Iniciar sesión
             </Button>
           )}
 
           <div className="flex items-center gap-2 text-xs text-ink-mute">
-            <button
-              type="button"
-              className="hover:text-ink underline-offset-2 hover:underline"
-              onClick={() => setMode(mode === 'signup' ? 'signin' : 'signup')}
-            >
-              {mode === 'signup' ? 'Ya tengo cuenta' : 'Crear cuenta nueva'}
-            </button>
-            <span>·</span>
-            <button
-              type="button"
-              className="hover:text-ink underline-offset-2 hover:underline"
-              onClick={() => setMode('magic')}
-            >
-              Usar enlace mágico
-            </button>
+            {mode === 'magic' ? (
+              <button
+                type="button"
+                className="hover:text-ink underline-offset-2 hover:underline"
+                onClick={() => setMode('signin')}
+              >
+                Usar mi contraseña
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="hover:text-ink underline-offset-2 hover:underline"
+                onClick={() => setMode('magic')}
+              >
+                Usar enlace mágico
+              </button>
+            )}
           </div>
         </div>
+
+        <p className="text-2xs text-ink-mute flex items-center gap-1.5 border-t border-mist pt-3">
+          <UserCog size={12} className="shrink-0" />
+          Las cuentas las crea el administrador de tu clínica. Si no tienes
+          acceso, pídeselo a tu encargado.
+        </p>
       </Card>
     </div>
   )

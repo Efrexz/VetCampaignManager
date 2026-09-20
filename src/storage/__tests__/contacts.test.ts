@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test } from 'vitest'
-import { findContactStates, markContacted } from '../contacts'
+import {
+  findContactStates,
+  listContactExclusions,
+  markContacted,
+  setContactFlags,
+} from '../contacts'
 
 beforeEach(() => {
   localStorage.clear()
@@ -39,5 +44,67 @@ describe('contact ledger (localStorage)', () => {
     await markContacted([{ phone: '+51987654321', ownerName: '', petName: '' }])
     const raw = localStorage.getItem('vcm:contacts:v1')
     expect(raw).toContain('María')
+  })
+})
+
+describe('exclusion list (NO CONTACTAR flags)', () => {
+  test('flagging creates the ledger row and the guard sees it', async () => {
+    await setContactFlags([
+      {
+        phone: '+51917777777',
+        ownerName: 'Problemático',
+        note: 'Molesto',
+        doNotContact: true,
+      },
+    ])
+    const states = await findContactStates(['+51917777777'])
+    expect(states.get('+51917777777')?.doNotContact).toBe(true)
+
+    const exclusions = await listContactExclusions()
+    expect(exclusions).toEqual([
+      {
+        phone: '+51917777777',
+        ownerName: 'Problemático',
+        petName: '',
+        note: 'Molesto',
+      },
+    ])
+  })
+
+  test('multi-phone client → one flag per phone, same note', async () => {
+    const note = 'Pidió que no escribamos'
+    await setContactFlags([
+      { phone: '+51911111111', note, doNotContact: true },
+      { phone: '+51922222222', note, doNotContact: true },
+      { phone: '+51933333333', note, doNotContact: true },
+    ])
+    for (const phone of ['+51911111111', '+51922222222', '+51933333333']) {
+      expect((await findContactStates([phone])).get(phone)?.doNotContact).toBe(
+        true,
+      )
+    }
+    expect(await listContactExclusions()).toHaveLength(3)
+  })
+
+  test('unflagging clears the exclusion and the note', async () => {
+    await setContactFlags([
+      { phone: '+51917777777', note: 'Molesto', doNotContact: true },
+    ])
+    await setContactFlags([{ phone: '+51917777777', doNotContact: false }])
+    expect(await listContactExclusions()).toEqual([])
+    const states = await findContactStates(['+51917777777'])
+    expect(states.get('+51917777777')?.doNotContact).toBe(false)
+  })
+
+  test('exclusion survives a later real dispatch (flag not reset)', async () => {
+    await setContactFlags([
+      { phone: '+51917777777', note: 'Molesto', doNotContact: true },
+    ])
+    await markContacted([
+      { phone: '+51917777777', ownerName: 'X', petName: 'Y' },
+    ])
+    const states = await findContactStates(['+51917777777'])
+    expect(states.get('+51917777777')?.doNotContact).toBe(true)
+    expect(await listContactExclusions()).toHaveLength(1)
   })
 })

@@ -24,6 +24,17 @@ export interface ReleaseEntry {
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    id: '2026-09-19-2',
+    date: '19 de septiembre, 2026',
+    title: 'Clientes vetados y login más claro 🔕',
+    relevant: true,
+    items: [
+      'Nueva pestaña Ajustes → Clientes excluidos: ahí se apunta a los clientes donde no se debe escribir nunca (con su nota del motivo). En la revisión aparecen con sello rojo "NO CONTACTAR" y no se les puede enviar.',
+      'Si un cliente tiene varios números, se pueden registrar todos juntos: aunque aparezca cualquier número en un Excel futuro, ese mensaje no sale.',
+      'El botón "Crear cuenta" ya no aparece en el inicio de sesión: las cuentas las crea el administrador. Si a alguien le falta acceso, se lo pide al encargado (el enlace mágico sigue disponible).',
+    ],
+  },
+  {
     id: '2026-09-19',
     date: '19 de septiembre, 2026',
     title: 'Mensajes sin repeticiones 🐾',

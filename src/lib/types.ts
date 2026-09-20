@@ -19,6 +19,27 @@ export interface ContactState {
   doNotContact: boolean
 }
 
+/** One excluded number as shown in the "Clientes excluidos" tab. */
+export interface ContactExclusion {
+  phone: string
+  ownerName: string
+  petName: string
+  note?: string
+}
+
+/**
+ * An exclusion-list manipulation (Settings tab): one or more phones for the
+ * same client, plus an optional note. The ledger stays phone-keyed — one
+ * entry per phone.
+ */
+export interface ContactFlagEntry {
+  phone: string
+  ownerName?: string
+  petName?: string
+  note?: string
+  doNotContact: boolean
+}
+
 export interface Recipient {
   /** Stable client-side id (nanoid) — Supabase-row-compatible later. */
   id: string

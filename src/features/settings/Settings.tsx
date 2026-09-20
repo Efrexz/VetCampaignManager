@@ -1,15 +1,17 @@
 import { useState } from 'react'
-import { Tags, MessageSquare, Webhook } from 'lucide-react'
+import { Tags, MessageSquare, Webhook, Ban } from 'lucide-react'
 import { Tabs } from '@/shared/components/ui'
 import { CategoriesTab } from './CategoriesTab'
 import { TemplatesTab } from './TemplatesTab'
 import { WebhookTab } from './WebhookTab'
+import { ExclusionsTab } from './ExclusionsTab'
 
-type TabId = 'categories' | 'templates' | 'webhook'
+type TabId = 'categories' | 'templates' | 'exclusions' | 'webhook'
 
 const tabs = [
   { id: 'categories', label: 'Categorías', icon: <Tags size={14} /> },
   { id: 'templates', label: 'Plantillas', icon: <MessageSquare size={14} /> },
+  { id: 'exclusions', label: 'Clientes excluidos', icon: <Ban size={14} /> },
   { id: 'webhook', label: 'Conexión', icon: <Webhook size={14} /> },
 ]
 
@@ -34,6 +36,7 @@ export function Settings() {
 
       {tab === 'categories' && <CategoriesTab />}
       {tab === 'templates' && <TemplatesTab />}
+      {tab === 'exclusions' && <ExclusionsTab />}
       {tab === 'webhook' && <WebhookTab />}
     </div>
   )

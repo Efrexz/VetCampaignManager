@@ -18,6 +18,8 @@ import type {
   CampaignDraft,
   CampaignRecord,
   ContactState,
+  ContactExclusion,
+  ContactFlagEntry,
 } from '@/lib/types'
 
 export interface ContactEntry {
@@ -519,8 +521,126 @@ export async function markContacted(entries: ContactEntry[]): Promise<void> {
   }
 }
 
-// ── Campaign deliveries (one row per attempted message) ─────────────────────
+/**
+ * Toggle the per-phone "NO CONTACTAR" flag (exclusion list). Upserts the
+ * contact row when it does not exist yet; same two-step insert/update
+ * pattern as `markContacted`. The optional `note` column (migration 0008)
+ * degrades gracefully when it has not been applied yet.
+ */
+export async function setContactFlags(
+  entries: ContactFlagEntry[],
+): Promise<void> {
+  if (entries.length === 0) return
+  const sb = requireSupabase()
+  const bid = branchId()
+  const tid = tenantId()
+  const phones = entries.map((e) => e.phone)
 
+  const existingRow = await sb
+    .from('contacts')
+    .select('id, phone')
+    .eq('branch_id', bid)
+    .in('phone', phones)
+  if (existingRow.error) throw existingRow.error
+
+  const existing = new Map(
+    (existingRow.data ?? []).map((r) => [r.phone, r.id as string]),
+  )
+
+  const toInsert = entries
+    .filter((e) => !existing.has(e.phone))
+    .map((e) => ({
+      id: newId(),
+      tenant_id: tid,
+      branch_id: bid,
+      phone: e.phone,
+      owner_name: e.ownerName?.trim() ?? '',
+      pet_name: e.petName?.trim() ?? '',
+      do_not_contact: e.doNotContact,
+      last_contacted_at: null,
+      last_contacts: {},
+      ...(e.note?.trim() ? { note: e.note.trim() } : {}),
+    }))
+  if (toInsert.length > 0) {
+    let { error: insErr } = await sb.from('contacts').insert(toInsert)
+    if (insErr && isMissingColumn(insErr, 'note')) {
+      console.warn('contacts.note missing — run migration 0008. Saving without note.')
+      const stripped: Array<Record<string, unknown>> = toInsert.map((row) => {
+        const rest = { ...row } as Record<string, unknown>
+        delete rest.note
+        return rest
+      })
+      ;({ error: insErr } = await sb.from('contacts').insert(stripped))
+    }
+    if (insErr) throw insErr
+  }
+
+  const toUpdate = entries.filter((e) => existing.has(e.phone))
+  for (const e of toUpdate) {
+    const payload: Record<string, unknown> = {
+      do_not_contact: e.doNotContact,
+      note: e.doNotContact ? e.note?.trim() || null : null,
+    }
+    if (e.ownerName?.trim()) payload.owner_name = e.ownerName.trim()
+    if (e.petName?.trim()) payload.pet_name = e.petName.trim()
+    let { error: updErr } = await sb
+      .from('contacts')
+      .update(payload)
+      .eq('id', existing.get(e.phone))
+    if (updErr && isMissingColumn(updErr, 'note')) {
+      console.warn('contacts.note missing — updating without note.')
+      delete payload.note
+      ;({ error: updErr } = await sb
+        .from('contacts')
+        .update(payload)
+        .eq('id', existing.get(e.phone)))
+    }
+    if (updErr) throw updErr
+  }
+}
+
+/** Exclusion-list rows for the Settings tab, sorted by phone. */
+export async function listContactExclusions(): Promise<ContactExclusion[]> {
+  const sb = requireSupabase()
+  const first = await sb
+    .from('contacts')
+    .select('phone, owner_name, pet_name, note, do_not_contact')
+    .eq('branch_id', branchId())
+    .eq('do_not_contact', true)
+    .order('phone')
+  let rows =
+    first.data as Array<{
+      phone: string
+      owner_name: string
+      pet_name: string
+      note: string | null
+      do_not_contact: boolean
+    }> | null
+  if (first.error && isMissingColumn(first.error, 'note')) {
+    console.warn('contacts.note missing — listing without notes.')
+    const legacy = await sb
+      .from('contacts')
+      .select('phone, owner_name, pet_name, do_not_contact')
+      .eq('branch_id', branchId())
+      .eq('do_not_contact', true)
+      .order('phone')
+    if (legacy.error) throw legacy.error
+    rows = (legacy.data ?? []).map((row) => ({
+      ...row,
+      note: null as string | null,
+    }))
+  } else if (first.error) {
+    throw first.error
+  }
+  return (rows ?? []).map((row) => ({
+    phone: row.phone,
+    ownerName: row.owner_name,
+    petName: row.pet_name,
+    note: row.note ?? undefined,
+  }))
+}
+
+// ── Campaign deliveries (one row per attempted message) ─────────────────────
 /** Insert the initial 'queued' rows for a dispatched campaign. */
 export async function recordDeliveries(
   campaignId: string,
