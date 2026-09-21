@@ -3,6 +3,7 @@ import { Save, Trash2, AlertTriangle, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Button,
+  Chip,
   Input,
   MessagePreview,
   Select,
@@ -237,30 +238,36 @@ export function TemplateEditor({ template, onDelete }: Props) {
       {/* Attached image */}
       <TemplateMediaPicker media={media} onChange={setMedia} />
 
-      {/* Body variants (anti-ban text variation) */}
-      <div className="rounded-md border border-mist bg-paper p-4">
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <h4 className="text-sm font-semibold text-ink">
-            Variaciones del mensaje
-            {variants.length > 0 && (
-              <span className="ml-2 text-2xs text-ink-mute font-normal">
-                activo — se reparte entre {variants.length + 1} textos
-              </span>
+      {/* Body variants (anti-ban text variation) — highlighted on purpose */}
+      <div className="rounded-md border-l-4 border-vegetal border-y border-r border-mist bg-vegetal-soft/25 p-4">
+        <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+          <div className="flex items-center gap-2">
+            <h4 className="text-sm font-semibold text-ink">
+              Variaciones del mensaje
+            </h4>
+            {variants.length > 0 ? (
+              <Chip tone="vegetal">
+                activo — {variants.length + 1} textos en rotación
+              </Chip>
+            ) : (
+              <Chip tone="warn">Opcional · recomendado</Chip>
             )}
-          </h4>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setVariants((vs) => [...vs, ''])}
-          >
-            <Plus size={12} />
-            Agregar variante
-          </Button>
+          </div>
+          {variants.length === 0 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setVariants((vs) => [...vs, ''])}
+            >
+              <Plus size={12} />
+              Agregar variante
+            </Button>
+          )}
         </div>
         <p className="text-xs text-ink-soft mb-3 leading-relaxed">
-          Los mensajes 100% idénticos son lo que hace que WhatsApp bloquee a un
-          número. Agrega 1 o 2 versiones alternativas del mensaje: a cada
-          cliente le tocara una de ellas según su número (siempre la misma
+          Los mensajes 100% idénticos son lo que hace que WhatsApp bloquee a
+          un número. Agrega 1 o 2 versiones alternativas del mensaje: a cada
+          cliente le tocará una de ellas según su número (y siempre la misma
           para él). Opcional — si no agregas ninguna, todo sigue igual.
         </p>
         {variants.length === 0 ? (
@@ -270,12 +277,12 @@ export function TemplateEditor({ template, onDelete }: Props) {
         ) : (
           <div className="space-y-3">
             {variants.map((v, i) => (
-              <div key={i}>
+              <div key={i} className="bg-paper rounded-md border border-mist p-3">
                 <label className="flex items-center justify-between text-2xs text-ink-mute mb-1">
                   <span>Variante {i + 1} — se reparte entre todos los clientes</span>
                   <button
                     type="button"
-                    className="hover:text-danger"
+                    className="hover:text-danger font-medium"
                     onClick={() =>
                       setVariants((vs) => vs.filter((_, j) => j !== i))
                     }

@@ -24,6 +24,16 @@ export interface ReleaseEntry {
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    id: '2026-09-21',
+    date: '21 de septiembre, 2026',
+    title: 'Cuidamos tu WhatsApp 🛡️',
+    relevant: true,
+    items: [
+      'Si vas a enviar una campaña grande (más de 50 mensajes), la app te avisa antes con una recomendación de enviar por partes — reduce el riesgo de que WhatsApp bloquee el número de la clínica.',
+      'Las plantillas ahora pueden tener variaciones (las configura el encargado): los mensajes ya no salen todos idénticos, y eso también baja el riesgo.',
+    ],
+  },
+  {
     id: '2026-09-20-2',
     date: '20 de septiembre, 2026',
     title: 'Clientes vetados y login más claro 🔕',
@@ -31,7 +41,7 @@ export const RELEASE_NOTES: ReleaseEntry[] = [
     items: [
       'Nueva pestaña Ajustes → Clientes excluidos: ahí se apunta a los clientes donde no se debe escribir nunca (con su nota del motivo). En la revisión aparecen con sello rojo "NO CONTACTAR" y no se les puede enviar.',
       'Si un cliente tiene varios números, se pueden registrar todos juntos: aunque aparezca cualquier número en un Excel futuro, ese mensaje no sale.',
-      'El botón "Crear cuenta" ya no aparece en el inicio de sesión: las cuentas las crea el administrador. Si a alguien le falta acceso, se lo pide al encargado (el enlace mágico sigue disponible).',
+      'El botón "Crear cuenta" ya no aparece en el inicio de sesión: las cuentas las crea el administrador. Si a alguien le falta acceso, se lo pide al encargado.',
     ],
   },
   {

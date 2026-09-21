@@ -363,21 +363,29 @@ export function SendCampaign() {
 
         {/* Volume warning (anti-ban): AFTER grouping/blocked filter — the real count */}
         {sendableGroups.length > SEND_BATCH_WARN && (
-            <div className="mt-5 flex items-start gap-2 rounded-md border border-warn/30 bg-warn-soft/40 p-3 text-sm text-warn">
-              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-              <span>
-                <strong>
-                  Esta campaña saldrá en una sola tanda de{' '}
-                  {sendableGroups.length} mensajes
-                </strong>{' '}
-                (el Excel tenía {result.totals.totalRows} filas, pero aquí ya
-                están combinadas las repetidas y bloqueadas). Enviar muchos
-                mensajes seguidos a un número aumenta el riesgo de bloqueo de
-                WhatsApp: si puedes, importa y envía por partes (por categoría
-                o primeros 40–50), o espera unas horas entre tandas.
-              </span>
+          <div
+            className="mt-5 rounded-md border border-l-4 border-warn/40 border-l-warn bg-warn-soft/50 p-4 flex items-start gap-3"
+            role="alert"
+          >
+            <div className="shrink-0 rounded-full bg-warn text-paper p-1.5 mt-0.5">
+              <AlertTriangle size={18} />
             </div>
-          )}
+            <div>
+              <p className="text-sm font-semibold text-warn mb-1">
+                Campaña grande: {sendableGroups.length} mensajes saldrán en
+                una sola tanda
+              </p>
+              <p className="text-xs text-ink-soft leading-relaxed">
+                Ya están combinadas las mascotas repetidas y excluidos los
+                bloqueados (el Excel tenía {result.totals.totalRows} filas).
+                Enviar muchos mensajes seguidos a un número aumenta el riesgo
+                de que WhatsApp lo bloquee. Si puedes, importa y envía por
+                partes (por categoría o primeros 40–50), o espera unas horas
+                entre tandas.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Webhook status */}
         <div className="mt-5 flex items-center gap-2 rounded-sm bg-mist-soft/40 border border-mist p-3 text-xs">
