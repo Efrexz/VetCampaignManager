@@ -161,8 +161,14 @@ export interface MessageTemplate {
   categoryId: string | null
   /** Human label for the editor list, e.g. "Recordatorio vacuna". */
   name: string
-  /** Body with {{owner}}, {{pet}}, {{category}} placeholders. */
+  /** Body with {{owner}}, {{pet}}, {{pets}}, {{category}} placeholders. */
   body: string
+  /**
+   * Alternative bodies for anti-ban variation. When present, the message
+   * rendered per phone is picked deterministically (hash of the phone), so
+   * the same client always sees the same variant. Empty = single body.
+   */
+  variants?: string[]
   /** True when this is the global default fallback template. */
   isDefault: boolean
   /** Optional image sent alongside the message (message becomes the caption). */

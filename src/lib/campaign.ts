@@ -169,8 +169,29 @@ export interface SendableRecipient {
 }
 
 /**
+ * Pick a template body variant deterministically per phone: same phone always
+ * gets the same variant, and a campaign spreads evenly across them. Returns
+ * the main body when no variants are configured.
+ */
+export function pickTemplateBody(
+  body: string,
+  variants: string[] | undefined,
+  phone: string,
+): string {
+  const list = (variants ?? []).filter((v) => v.trim())
+  if (list.length === 0) return body
+  const digits = phone.replace(/\D/g, '')
+  let hash = 0
+  for (const ch of digits) {
+    hash = (hash * 10 + (ch.charCodeAt(0) - 48)) % 1_000_003
+  }
+  return list[hash % list.length]
+}
+
+/**
  * Render the message for a GROUP (phone + category) using its template.
  * {{pets}} resolves to every pet in the group; {{pet}} stays the first one.
+ * A template with variants rotates bodies per phone (anti-ban variation).
  */
 export function renderMessageForGroup(
   group: RecipientGroup,
@@ -186,13 +207,18 @@ export function renderMessageForGroup(
     return { text: '', unknown: [], empty: [] }
   }
   const first = group.recipients[0]
+  const body = pickTemplateBody(
+    template.body,
+    template.variants,
+    group.phone,
+  )
   const ctx: RenderContext = {
     owner: group.owner,
     pet: group.pets[0] ?? first?.pet ?? '',
     pets: joinPetNames(group.pets),
     category: group.category,
   }
-  const result: RenderResult = renderTemplate(template.body, ctx)
+  const result: RenderResult = renderTemplate(body, ctx)
   return {
     text: result.text,
     template,

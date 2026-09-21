@@ -5,6 +5,7 @@ import {
   daysSince,
   defaultEnabledFor,
   normalizeCategoryName,
+  pickTemplateBody,
   recentlyContactedFor,
   renderMessageForGroup,
   resolveTemplateByCategoryName,
@@ -61,6 +62,36 @@ describe('normalizeCategoryName', () => {
   test('lowercases, trims and strips accents', () => {
     expect(normalizeCategoryName('  Hidratación ')).toBe('hidratacion')
     expect(normalizeCategoryName('VACUNA')).toBe('vacuna')
+  })
+})
+
+describe('pickTemplateBody (anti-ban variants)', () => {
+  const variants = ['VARIANTE A', 'VARIANTE B', 'VARIANTE C']
+
+  test('no variants → main body', () => {
+    expect(pickTemplateBody('PRINCIPAL', undefined, '+51980000000')).toBe(
+      'PRINCIPAL',
+    )
+    expect(pickTemplateBody('PRINCIPAL', [], '+51980000000')).toBe('PRINCIPAL')
+    expect(pickTemplateBody('PRINCIPAL', ['  ', ''], '+51980000000')).toBe(
+      'PRINCIPAL',
+    )
+  })
+
+  test('same phone always resolves to the same variant', () => {
+    const a = pickTemplateBody('P', variants, '+51980000000')
+    const b = pickTemplateBody('P', variants, '+51980000000')
+    expect(a).toBe(b)
+    expect(variants).toContain(a)
+  })
+
+  test('different phones spread across variants', () => {
+    const used = new Set(
+      Array.from({ length: 24 }, (_, i) =>
+        pickTemplateBody('P', variants, `+51980000${String(i).padStart(3, '0')}`),
+      ),
+    )
+    expect(used.size).toBe(3)
   })
 })
 

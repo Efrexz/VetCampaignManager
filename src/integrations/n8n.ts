@@ -40,7 +40,7 @@ async function fetchWithTimeout(
 export async function sendCampaign(
   payload: N8nCampaignPayload,
   webhookUrl: string,
-  opts: { timeoutMs?: number } = {},
+  opts: { timeoutMs?: number; token?: string } = {},
 ): Promise<SendResult> {
   // Mock mode: empty webhook URL → pretend success and echo the payload shape.
   if (!webhookUrl.trim()) {
@@ -57,13 +57,19 @@ export async function sendCampaign(
 
   const body = JSON.stringify(payload)
   const timeout = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  // Secret shared with the n8n webhook (Header Auth). Without it a leaked
+  // URL would let anyone fire messages to the clinic's clients.
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (opts.token?.trim()) headers['X-VCM-Token'] = opts.token.trim()
 
   // Single attempt. No retry: resending a campaign would duplicate messages
   // to real clients. The user must explicitly retry from the UI.
   try {
     const res = await fetchWithTimeout(webhookUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body,
     })
     if (res.ok) {

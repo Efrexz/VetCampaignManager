@@ -15,6 +15,7 @@ import { useTenantStore } from '@/shared/stores/tenantStore'
 import type {
   Category,
   MessageTemplate,
+  TemplateMedia,
   CampaignDraft,
   CampaignRecord,
   ContactState,
@@ -133,23 +134,71 @@ export function makeCategory(name: string): Category {
 
 // ── Templates (branch-scoped) ────────────────────────────────────────────────
 
-export async function listTemplates(): Promise<MessageTemplate[]> {
-  const sb = requireSupabase()
-  const { data, error } = await sb
-    .from('message_templates')
-    .select('id, category_id, name, body, is_default, media')
-    .eq('branch_id', branchId())
-    .order('is_default', { ascending: false })
-    .order('name')
-  if (error) throw error
-  return (data ?? []).map((row) => ({
+/** Raw template row as it can come from any select variant (legacy or full). */
+interface TemplateRow {
+  id: string
+  category_id: string | null
+  name: string
+  body: string
+  is_default: boolean
+  media: unknown
+  variants: unknown
+}
+
+/** Full column list + graceful degradation when 0009 has not run yet. */
+type TemplateQueryResult = {
+  data: unknown
+  error: { message?: string; code?: string } | null
+}
+
+async function fetchTemplateRows(
+  run: (cols: string) => PromiseLike<TemplateQueryResult>,
+): Promise<TemplateRow[]> {
+  const withVariants = await run(
+    'id, category_id, name, body, is_default, media, variants',
+  )
+  if (withVariants.error && isMissingColumn(withVariants.error, 'variants')) {
+    console.warn(
+      'message_templates.variants missing — run supabase/migrations/0009. Variants disabled.',
+    )
+    const legacy = await run('id, category_id, name, body, is_default, media')
+    if (legacy.error) throw legacy.error
+    return ((legacy.data as Array<Record<string, unknown>>) ?? []).map((r) => ({
+      ...r,
+      variants: [],
+    })) as TemplateRow[]
+  }
+  if (withVariants.error) throw withVariants.error
+  return withVariants.data as TemplateRow[]
+}
+
+function mapTemplateRow(row: TemplateRow): MessageTemplate {
+  const variants = row.variants as string[] | null
+  const validVariants = Array.isArray(variants)
+    ? variants.filter((v) => typeof v === 'string' && v.trim())
+    : []
+  return {
     id: row.id,
     categoryId: row.category_id,
     name: row.name,
     body: row.body,
     isDefault: row.is_default,
-    media: row.media ?? null,
-  }))
+    media: (row.media as TemplateMedia | null) ?? null,
+    ...(validVariants.length > 0 ? { variants: validVariants } : {}),
+  }
+}
+
+export async function listTemplates(): Promise<MessageTemplate[]> {
+  const sb = requireSupabase()
+  const rows = await fetchTemplateRows((cols) =>
+    sb
+      .from('message_templates')
+      .select(cols)
+      .eq('branch_id', branchId())
+      .order('is_default', { ascending: false })
+      .order('name'),
+  )
+  return rows.map(mapTemplateRow)
 }
 
 export async function saveTemplate(t: MessageTemplate): Promise<MessageTemplate> {
@@ -168,20 +217,34 @@ export async function saveTemplate(t: MessageTemplate): Promise<MessageTemplate>
     if (clearErr) throw clearErr
   }
 
-  const { error } = await sb
+  const insertPayload = {
+    id: t.id,
+    tenant_id: tenantId(),
+    branch_id: bid,
+    category_id: t.categoryId,
+    name: t.name,
+    body: t.body,
+    is_default: t.isDefault,
+    media: t.media ?? null,
+    variants: (t.variants ?? []).filter((v) => v.trim()),
+  }
+  let { error } = await sb
     .from('message_templates')
-    .upsert({
-      id: t.id,
-      tenant_id: tenantId(),
-      branch_id: bid,
-      category_id: t.categoryId,
-      name: t.name,
-      body: t.body,
-      is_default: t.isDefault,
-      media: t.media ?? null,
-    })
+    .upsert(insertPayload)
     .select('id, category_id, name, body, is_default')
     .single()
+  if (error && isMissingColumn(error, 'variants')) {
+    console.warn(
+      'message_templates.variants missing — run supabase/migrations/0009. Saving without variants.',
+    )
+    const stripped: Record<string, unknown> = { ...insertPayload }
+    delete stripped.variants
+    ;({ error } = await sb
+      .from('message_templates')
+      .upsert(stripped)
+      .select('id, category_id, name, body, is_default')
+      .single())
+  }
   if (error) throw error
   return t
 }
@@ -224,42 +287,28 @@ export async function getTemplateForCategory(
   categoryId: string,
 ): Promise<MessageTemplate | undefined> {
   const sb = requireSupabase()
-  const { data, error } = await sb
-    .from('message_templates')
-    .select('id, category_id, name, body, is_default, media')
-    .eq('branch_id', branchId())
-    .eq('category_id', categoryId)
-    .maybeSingle()
-  if (error) throw error
-  if (!data) return undefined
-  return {
-    id: data.id,
-    categoryId: data.category_id,
-    name: data.name,
-    body: data.body,
-    isDefault: data.is_default,
-    media: data.media ?? null,
-  }
+  const rows = await fetchTemplateRows((cols) =>
+    sb
+      .from('message_templates')
+      .select(cols)
+      .eq('branch_id', branchId())
+      .eq('category_id', categoryId)
+      .maybeSingle(),
+  )
+  return rows[0] ? mapTemplateRow(rows[0]) : undefined
 }
 
 export async function getDefaultTemplate(): Promise<MessageTemplate | undefined> {
   const sb = requireSupabase()
-  const { data, error } = await sb
-    .from('message_templates')
-    .select('id, category_id, name, body, is_default, media')
-    .eq('branch_id', branchId())
-    .eq('is_default', true)
-    .maybeSingle()
-  if (error) throw error
-  if (!data) return undefined
-  return {
-    id: data.id,
-    categoryId: data.category_id,
-    name: data.name,
-    body: data.body,
-    isDefault: data.is_default,
-    media: data.media ?? null,
-  }
+  const rows = await fetchTemplateRows((cols) =>
+    sb
+      .from('message_templates')
+      .select(cols)
+      .eq('branch_id', branchId())
+      .eq('is_default', true)
+      .maybeSingle(),
+  )
+  return rows[0] ? mapTemplateRow(rows[0]) : undefined
 }
 
 export function makeTemplate(input: {

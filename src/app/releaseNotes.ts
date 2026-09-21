@@ -24,8 +24,8 @@ export interface ReleaseEntry {
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
-    id: '2026-09-19-2',
-    date: '19 de septiembre, 2026',
+    id: '2026-09-20-2',
+    date: '20 de septiembre, 2026',
     title: 'Clientes vetados y login más claro 🔕',
     relevant: true,
     items: [
@@ -35,8 +35,8 @@ export const RELEASE_NOTES: ReleaseEntry[] = [
     ],
   },
   {
-    id: '2026-09-19',
-    date: '19 de septiembre, 2026',
+    id: '2026-09-17',
+    date: '17 de septiembre, 2026',
     title: 'Mensajes sin repeticiones 🐾',
     relevant: true,
     items: [

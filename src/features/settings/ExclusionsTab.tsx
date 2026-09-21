@@ -71,7 +71,12 @@ export function ExclusionsTab() {
     setBusy(true)
     try {
       await setContactFlags([
-        { phone: row.phone, ownerName: row.ownerName, doNotContact: false },
+        {
+          phone: row.phone,
+          ownerName: row.ownerName,
+          petName: row.petName,
+          doNotContact: false,
+        },
       ])
       toast.success(`${row.phone} vuelve a estar disponible para envíos.`)
       load()

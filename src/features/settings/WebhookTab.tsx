@@ -1,15 +1,35 @@
 import { useState } from 'react'
-import { Webhook, Save, Eye, EyeOff, Building2, CalendarClock } from 'lucide-react'
+import {
+  Webhook,
+  Save,
+  Eye,
+  EyeOff,
+  Building2,
+  CalendarClock,
+  KeyRound,
+} from 'lucide-react'
 import { Button, Card, Input } from '@/shared/components/ui'
 import { useSettingsStore } from '@/shared/stores/settingsStore'
+import { useTenantStore } from '@/shared/stores/tenantStore'
+import { HAS_SUPABASE } from '@/integrations/supabase'
 import { maskUrl } from '@/lib/format'
 import { RECONTACT_DAYS } from '@/lib/campaign'
 
 export function WebhookTab() {
   const settings = useSettingsStore((s) => s.settings)
   const updateSettings = useSettingsStore((s) => s.updateSettings)
+  const role = useTenantStore(
+    (s) =>
+      s.tenants.find((t) => t.id === s.currentTenantId)?.role ?? 'owner',
+  )
+
+  // Branch fields (webhook, name, window) live on the branches row, and RLS
+  // restricts its update to owner/admin. Show read-only for receptores so a
+  // save attempt never surfaces an opaque permission error.
+  const canEdit = !HAS_SUPABASE || role !== 'recepcionista'
 
   const [webhookUrl, setWebhookUrl] = useState(settings.webhookUrl)
+  const [token, setToken] = useState(settings.hmacSecret ?? '')
   const [branchName, setBranchName] = useState(settings.branchName ?? '')
   const [recontactRaw, setRecontactRaw] = useState(
     String(settings.recontactDays ?? RECONTACT_DAYS),
@@ -18,15 +38,18 @@ export function WebhookTab() {
 
   const recontactDays = parseRecontactDays(recontactRaw)
   const dirty =
-    webhookUrl !== settings.webhookUrl ||
-    branchName !== (settings.branchName ?? '') ||
-    recontactDays !== (settings.recontactDays ?? RECONTACT_DAYS)
+    canEdit &&
+    (webhookUrl !== settings.webhookUrl ||
+      token !== (settings.hmacSecret ?? '') ||
+      branchName !== (settings.branchName ?? '') ||
+      recontactDays !== (settings.recontactDays ?? RECONTACT_DAYS))
 
   const handleSave = () => {
     void updateSettings({
       webhookUrl: webhookUrl.trim(),
       branchName: branchName.trim(),
       recontactDays,
+      hmacSecret: token.trim(),
     })
   }
 
@@ -35,6 +58,16 @@ export function WebhookTab() {
 
   return (
     <div className="space-y-4 max-w-2xl">
+      {!canEdit && (
+        <div className="rounded-md border border-mist bg-mist-soft/40 p-3 text-sm text-ink-soft flex items-start gap-2">
+          <Eye size={14} className="mt-0.5 shrink-0" />
+          <span>
+            Los ajustes de esta pestaña los maneja el administrador de tu
+            clínica. Si algo está mal conectado, avísale y él lo cambia aquí.
+          </span>
+        </div>
+      )}
+
       <Card className="p-5">
         <div className="flex items-center gap-2 mb-1">
           <span className="rounded-sm bg-vegetal-soft text-vegetal p-1.5">
@@ -56,9 +89,9 @@ export function WebhookTab() {
         <div className="flex gap-2">
           <Input
             type={showUrl ? 'url' : 'text'}
-            value={showUrl ? webhookUrl : (webhookUrl ? masked : '')}
+            value={showUrl ? webhookUrl : webhookUrl ? masked : ''}
             onChange={(e) => setWebhookUrl(e.target.value)}
-            readOnly={!showUrl && webhookUrl !== ''}
+            readOnly={!canEdit || (!showUrl && webhookUrl !== '')}
             placeholder="https://n8n.tu-clinica.com/webhook/campaign"
           />
           <Button
@@ -77,6 +110,33 @@ export function WebhookTab() {
           </p>
         )}
       </Card>
+
+      {canEdit && (
+        <Card className="p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="rounded-sm bg-vegetal-soft text-vegetal p-1.5">
+              <KeyRound size={16} />
+            </span>
+            <h3 className="text-md font-semibold text-ink">
+              Clave secreta de envío (recomendada)
+            </h3>
+          </div>
+          <p className="text-sm text-ink-soft mb-4">
+            Evita que alguien fuera de la clínica pueda disparar envíos si el
+            enlace se filtra: la app lo envía como encabezado{' '}
+            <code className="font-mono">X-VCM-Token</code>. En n8n, activa
+            Header Auth en el nodo Webhook con ese mismo nombre y el mismo
+            valor. Déjalo vacío si no lo usas todavía.
+          </p>
+          <Input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="una clave larga y aleatoria"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          />
+        </Card>
+      )}
 
       <Card className="p-5">
         <h3 className="text-md font-semibold text-ink mb-1">
@@ -112,6 +172,7 @@ export function WebhookTab() {
         <Input
           value={branchName}
           onChange={(e) => setBranchName(e.target.value)}
+          readOnly={!canEdit}
           placeholder="Sede Norte"
           className="max-w-xs"
         />
@@ -141,6 +202,7 @@ export function WebhookTab() {
           max={90}
           value={recontactRaw}
           onChange={(e) => setRecontactRaw(e.target.value)}
+          readOnly={!canEdit}
           className="max-w-xs"
         />
         <p className="text-xs text-ink-mute mt-1.5">
@@ -150,17 +212,19 @@ export function WebhookTab() {
         </p>
       </Card>
 
-      <div className="flex justify-end">
-        <Button
-          variant="primary"
-          size="md"
-          onClick={handleSave}
-          disabled={!dirty}
-        >
-          <Save size={14} />
-          Guardar
-        </Button>
-      </div>
+      {canEdit && (
+        <div className="flex justify-end">
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleSave}
+            disabled={!dirty}
+          >
+            <Save size={14} />
+            Guardar
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

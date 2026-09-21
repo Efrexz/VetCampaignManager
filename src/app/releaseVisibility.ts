@@ -5,6 +5,26 @@
  */
 import { RELEASE_NOTES, type ReleaseEntry } from '@/app/releaseNotes'
 
+/** localStorage key shared by the bell and the startup announcer. */
+export const RELEASE_SEEN_KEY = 'vcm:releases:lastSeen:v1'
+
+export function readLastSeenRelease(): string | null {
+  try {
+    return localStorage.getItem(RELEASE_SEEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function writeLastSeenRelease(id: string | null): void {
+  try {
+    if (id === null) localStorage.removeItem(RELEASE_SEEN_KEY)
+    else localStorage.setItem(RELEASE_SEEN_KEY, id)
+  } catch {
+    // private-mode browsers etc.: badge just stays, harmless.
+  }
+}
+
 /**
  * Entries strictly newer than the last one the user has seen. When nothing
  * was seen yet, every relevant entry counts (first-visit onboarding shows

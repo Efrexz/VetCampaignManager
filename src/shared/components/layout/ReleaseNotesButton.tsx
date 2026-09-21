@@ -2,13 +2,12 @@ import { useState } from 'react'
 import { Bell } from 'lucide-react'
 import { Modal } from '@/shared/components/ui'
 import { cn } from '@/lib/cn'
+import { RELEASE_NOTES, type ReleaseEntry } from '@/app/releaseNotes'
 import {
-  RELEASE_NOTES,
-  type ReleaseEntry,
-} from '@/app/releaseNotes'
-import {
+  readLastSeenRelease,
   releaseBadgeCount,
   unseenReleaseEntries,
+  writeLastSeenRelease,
 } from '@/app/releaseVisibility'
 
 /**
@@ -16,33 +15,15 @@ import {
  * the last one opened (tracked per browser, no database: the notes ship
  * inside the build). Opening the modal marks everything as seen.
  */
-const STORAGE_KEY = 'vcm:releases:lastSeen:v1'
-
-function readLastSeen(): string | null {
-  try {
-    return localStorage.getItem(STORAGE_KEY)
-  } catch {
-    return null
-  }
-}
-
-function writeLastSeen(id: string | null): void {
-  try {
-    if (id === null) localStorage.removeItem(STORAGE_KEY)
-    else localStorage.setItem(STORAGE_KEY, id)
-  } catch {
-    // private-mode browsers etc.: badge just stays, harmless.
-  }
-}
 
 export function ReleaseNotesButton({ className }: { className?: string }) {
-  const [lastSeen, setLastSeen] = useState<string | null>(readLastSeen)
+  const [lastSeen, setLastSeen] = useState<string | null>(readLastSeenRelease)
   const [open, setOpen] = useState(false)
   const badge = releaseBadgeCount(lastSeen)
 
   const handleOpen = () => {
     const newest = RELEASE_NOTES[0]
-    if (newest) writeLastSeen(newest.id)
+    if (newest) writeLastSeenRelease(newest.id)
     setLastSeen(newest ? newest.id : null)
     setOpen(true)
   }

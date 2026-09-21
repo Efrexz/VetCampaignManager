@@ -34,6 +34,9 @@ import {
 
 type SendStatus = 'idle' | 'sending' | 'success' | 'error'
 
+/** Above this message count, warn about WhatsApp ban risk (anti-ban). */
+const SEND_BATCH_WARN = 50
+
 export function SendCampaign() {
   const navigate = useNavigate()
   const result = useCampaignStore((s) => s.result)
@@ -127,7 +130,9 @@ export function SendCampaign() {
     setSendError(null)
     // Snapshot the payload that was actually dispatched.
     setPayload(previewPayload)
-    const res = await sendCampaign(previewPayload, settings.webhookUrl)
+    const res = await sendCampaign(previewPayload, settings.webhookUrl, {
+      token: settings.hmacSecret,
+    })
     const totals = result.totals
     // Valid rows never actually messaged: disabled groups and services
     // folded into another message (deferred). Sent rows = recipients of
@@ -355,6 +360,24 @@ export function SendCampaign() {
             </div>
           )}
         </div>
+
+        {/* Volume warning (anti-ban): AFTER grouping/blocked filter — the real count */}
+        {sendableGroups.length > SEND_BATCH_WARN && (
+            <div className="mt-5 flex items-start gap-2 rounded-md border border-warn/30 bg-warn-soft/40 p-3 text-sm text-warn">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <span>
+                <strong>
+                  Esta campaña saldrá en una sola tanda de{' '}
+                  {sendableGroups.length} mensajes
+                </strong>{' '}
+                (el Excel tenía {result.totals.totalRows} filas, pero aquí ya
+                están combinadas las repetidas y bloqueadas). Enviar muchos
+                mensajes seguidos a un número aumenta el riesgo de bloqueo de
+                WhatsApp: si puedes, importa y envía por partes (por categoría
+                o primeros 40–50), o espera unas horas entre tandas.
+              </span>
+            </div>
+          )}
 
         {/* Webhook status */}
         <div className="mt-5 flex items-center gap-2 rounded-sm bg-mist-soft/40 border border-mist p-3 text-xs">

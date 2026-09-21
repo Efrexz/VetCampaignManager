@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { Save, Trash2, AlertTriangle } from 'lucide-react'
+import { Save, Trash2, AlertTriangle, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Button,
@@ -29,6 +29,7 @@ export function TemplateEditor({ template, onDelete }: Props) {
 
   const [name, setName] = useState(template.name)
   const [body, setBody] = useState(template.body)
+  const [variants, setVariants] = useState<string[]>(template.variants ?? [])
   const [categoryId, setCategoryId] = useState<string | null>(template.categoryId)
   const [isDefault, setIsDefault] = useState(template.isDefault)
   const [media, setMedia] = useState<TemplateMedia | null>(template.media ?? null)
@@ -63,7 +64,9 @@ export function TemplateEditor({ template, onDelete }: Props) {
     body !== template.body ||
     categoryId !== template.categoryId ||
     isDefault !== template.isDefault ||
-    JSON.stringify(media ?? null) !== JSON.stringify(template.media ?? null)
+    JSON.stringify(media ?? null) !== JSON.stringify(template.media ?? null) ||
+    JSON.stringify(variants.filter((v) => v.trim())) !==
+      JSON.stringify(template.variants ?? [])
 
   const handleSave = async () => {
     const next: MessageTemplate = {
@@ -73,6 +76,7 @@ export function TemplateEditor({ template, onDelete }: Props) {
       categoryId,
       isDefault,
       media,
+      variants: variants.filter((v) => v.trim()),
     }
     try {
       // saveTemplate inside updateTemplate already enforces one-default invariant.
@@ -232,6 +236,69 @@ export function TemplateEditor({ template, onDelete }: Props) {
 
       {/* Attached image */}
       <TemplateMediaPicker media={media} onChange={setMedia} />
+
+      {/* Body variants (anti-ban text variation) */}
+      <div className="rounded-md border border-mist bg-paper p-4">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <h4 className="text-sm font-semibold text-ink">
+            Variaciones del mensaje
+            {variants.length > 0 && (
+              <span className="ml-2 text-2xs text-ink-mute font-normal">
+                activo — se reparte entre {variants.length + 1} textos
+              </span>
+            )}
+          </h4>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setVariants((vs) => [...vs, ''])}
+          >
+            <Plus size={12} />
+            Agregar variante
+          </Button>
+        </div>
+        <p className="text-xs text-ink-soft mb-3 leading-relaxed">
+          Los mensajes 100% idénticos son lo que hace que WhatsApp bloquee a un
+          número. Agrega 1 o 2 versiones alternativas del mensaje: a cada
+          cliente le tocara una de ellas según su número (siempre la misma
+          para él). Opcional — si no agregas ninguna, todo sigue igual.
+        </p>
+        {variants.length === 0 ? (
+          <p className="text-2xs text-ink-mute">
+            Sin variantes: todos los clientes reciben el mensaje principal.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {variants.map((v, i) => (
+              <div key={i}>
+                <label className="flex items-center justify-between text-2xs text-ink-mute mb-1">
+                  <span>Variante {i + 1} — se reparte entre todos los clientes</span>
+                  <button
+                    type="button"
+                    className="hover:text-danger"
+                    onClick={() =>
+                      setVariants((vs) => vs.filter((_, j) => j !== i))
+                    }
+                  >
+                    Quitar
+                  </button>
+                </label>
+                <Textarea
+                  value={v}
+                  onChange={(e) =>
+                    setVariants((vs) =>
+                      vs.map((x, j) => (j === i ? e.target.value : x)),
+                    )
+                  }
+                  rows={4}
+                  className="text-sm"
+                  placeholder="Una versión con otras palabras, mismos datos {{owner}}, {{pets}}, {{category}}…"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {media && body.length > CAPTION_WARN_CHARS && (
         <div className="flex items-start gap-2 rounded-sm bg-warn-soft/50 border border-warn/20 p-2.5 text-xs text-warn">
