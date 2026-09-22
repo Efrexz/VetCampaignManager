@@ -58,6 +58,24 @@ export function WebhookTab() {
 
   return (
     <div className="space-y-4 max-w-2xl">
+      {/* Connection status pill */}
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-2xs font-medium ${
+          settings.webhookUrl.trim()
+            ? 'bg-vegetal-soft text-vegetal'
+            : 'bg-warn-soft text-warn'
+        }`}
+      >
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${
+            settings.webhookUrl.trim() ? 'bg-vegetal' : 'bg-warn'
+          }`}
+        />
+        {settings.webhookUrl.trim()
+          ? 'Conectado — los envíos salen de verdad'
+          : 'Sin configurar — los envíos son solo prueba'}
+      </span>
+
       {!canEdit && (
         <div className="rounded-md border border-mist bg-mist-soft/40 p-3 text-sm text-ink-soft flex items-start gap-2">
           <Eye size={14} className="mt-0.5 shrink-0" />

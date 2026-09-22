@@ -173,6 +173,24 @@ export function groupByDay(
   })
 }
 
+/** Real campaigns in the last `days` calendar days (today included). */
+export function filterByLastDays(
+  records: CampaignRecord[],
+  days: number,
+  now = new Date(),
+): CampaignRecord[] {
+  const start = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - (days - 1),
+  ).getTime()
+  return records.filter((r) => {
+    if (!isRealCampaign(r)) return false
+    const t = new Date(r.createdAt).getTime()
+    return !Number.isNaN(t) && t >= start
+  })
+}
+
 /** Real campaigns in the last `months` calendar months (current included). */
 export function filterByLastMonths(
   records: CampaignRecord[],

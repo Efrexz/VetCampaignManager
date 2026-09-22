@@ -56,6 +56,8 @@ export function SendCampaign() {
   const [sendError, setSendError] = useState<string | null>(null)
   /** Timestamp captured at the moment the webhook replied OK. */
   const [sentAt, setSentAt] = useState<Date | null>(null)
+  /** True when the send was a demo (mock webhook) — honest success text. */
+  const [mockSend, setMockSend] = useState(false)
 
   // Build the sendable groups + payload up front (memoized).
   const grouped = useMemo(
@@ -209,6 +211,7 @@ export function SendCampaign() {
 
     if (res.ok) {
       setSentAt(new Date())
+      setMockSend(res.mock)
       setStatus('success')
       if (res.mock) {
         toast.success('Prueba completada: no se envió nada de verdad.', {
@@ -253,13 +256,14 @@ export function SendCampaign() {
             </p>
           )}
           <p className="text-sm text-ink-soft mt-2 max-w-md mx-auto leading-relaxed">
-            Los{' '}
-            {payload?.recipients.length ?? 0} mensajes ya están en camino. Cada
-            cliente los recibirá por WhatsApp en los próximos minutos.
+            {mockSend
+              ? 'Envío de prueba completado: no salió nada de verdad, pero el flujo quedó registrado.'
+              : `Los ${payload?.recipients.length ?? 0} mensajes ya están en camino. Cada cliente los recibirá por WhatsApp en los próximos minutos.`}
           </p>
-          <div className="mt-6 grid grid-cols-2 gap-3 text-sm max-w-sm mx-auto">
-            <Stat size="sm" label="Destinatarios" value={payload?.recipients.length ?? 0} />
-            <Stat size="sm" label="Archivo" value={fileName || '—'} />
+          <div className="mt-6 grid grid-cols-3 gap-3 text-sm max-w-md mx-auto">
+            <Stat size="sm" icon={<Users size={14} />} label="Mensajes" value={payload?.recipients.length ?? 0} tone="vegetal" mono />
+            <Stat size="sm" icon={<Tag size={14} />} label="Categorías" value={categoryCounts.length} tone="neutral" mono />
+            <Stat size="sm" icon={<ImageIcon size={14} />} label="Archivo" value={fileName ? fileName.slice(0, 10) + (fileName.length > 10 ? '…' : '') : '—'} tone="neutral" />
           </div>
           <div className="mt-8 flex items-center justify-center gap-2">
             <Button variant="secondary" size="md" onClick={() => navigate('/campaign/preview')}>

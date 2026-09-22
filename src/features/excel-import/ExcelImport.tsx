@@ -2,6 +2,7 @@ import { AlertTriangle, RotateCcw } from 'lucide-react'
 import { Button } from '@/shared/components/ui'
 import { ImportDropzone } from './ImportDropzone'
 import { ImportSummary } from './ImportSummary'
+import { FormatPanel } from './FormatPanel'
 import { useExcelImport } from './useExcelImport'
 import { useCampaignStore } from '@/shared/stores/campaignStore'
 
@@ -55,20 +56,21 @@ export function ExcelImport() {
     )
   }
 
-  // Default: dropzone.
+  // Default: welcome headline + wide dropzone + format side panel.
   return (
-    <div className="p-6 max-w-2xl mx-auto animate-rise">
+    <div className="p-6 max-w-5xl mx-auto animate-rise">
       <div className="mb-5">
-        <h2 className="text-lg font-semibold text-ink">
-          Importar archivo Excel
-        </h2>
-        <p className="text-sm text-ink-soft mt-1">
-          Exporta el reporte desde VetPraxis y arrástralo aquí para revisar los
-          destinatarios antes de enviar la campaña.
+        <h2 className="text-lg font-semibold text-ink">Nueva campaña</h2>
+        <p className="text-sm text-ink-soft mt-1 max-w-xl">
+          Importa tu reporte de VetPraxis y en pocos minutos podrás revisar y
+          enviar los recordatorios por WhatsApp.
         </p>
       </div>
 
-      <ImportDropzone importState={importState} />
+      <div className="grid lg:grid-cols-[1fr,320px] gap-5 items-start">
+        <ImportDropzone importState={importState} />
+        <FormatPanel />
+      </div>
     </div>
   )
 }

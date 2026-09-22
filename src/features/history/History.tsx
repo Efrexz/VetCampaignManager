@@ -1,14 +1,20 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
-  History as HistoryIcon,
-  AlertCircle,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Loader2,
   FlaskConical,
 } from 'lucide-react'
-import { Card, Table, Tbody, Td, Th, Thead, Tr } from '@/shared/components/ui'
+import {
+  Card,
+  StatusPill,
+  Table,
+  Tbody,
+  Td,
+  Th,
+  Thead,
+  Tr,
+} from '@/shared/components/ui'
 import { listCampaigns, type CampaignRecord } from '@/storage/exports'
 import { useTenantStore } from '@/shared/stores/tenantStore'
 import { HAS_SUPABASE } from '@/integrations/supabase'
@@ -90,10 +96,6 @@ export function History() {
   if (shown.length === 0) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <HistoryIcon className="text-ink-soft" size={18} />
-          <h2 className="text-md font-semibold text-ink">Historial de campañas</h2>
-        </div>
         <Card className="p-6 text-center">
           <p className="text-sm text-ink-soft">
             {myBranchName
@@ -107,19 +109,15 @@ export function History() {
 
   return (
     <div className="space-y-4 animate-rise">
-      <div className="flex items-center gap-2">
-        <HistoryIcon className="text-ink-soft" size={18} />
-        <h2 className="text-md font-semibold text-ink">
-          {myBranchName ? `Historial — ${myBranchName}` : 'Historial de campañas'}
-        </h2>
-      </div>
+      {/* Scope summary chips — the TopBar header already frames the page */}
+      <SummaryChips records={shown} branchName={myBranchName} />
       <Card className="overflow-hidden">
         <Table>
           <Thead className="bg-mist-soft/40">
             <tr>
-              <Th>Fecha</Th>
-              <Th>Sede</Th>
-              <Th>Estado</Th>
+              <Th className="w-40">Fecha</Th>
+              <Th className="w-32 max-w-36">Sede</Th>
+              <Th className="w-36 min-w-28">Estado</Th>
               <Th className="text-right">Enviados</Th>
               <Th className="text-right">Inválidos</Th>
               <Th className="text-right">Duplicados</Th>
@@ -138,35 +136,33 @@ export function History() {
                     }`}
                     title={expanded ? 'Cerrar detalle' : 'Ver detalle de esta campaña'}
                   >
-                    <Td className="text-ink-soft flex items-center gap-1">
-                      {expanded ? (
-                        <ChevronDown size={12} className="text-ink-mute" />
-                      ) : (
-                        <ChevronRight size={12} className="text-ink-mute" />
-                      )}
-                      {fmtDate(r.createdAt)}
-                    </Td>
-                    <Td className="text-ink-soft">{r.branch?.trim() || '—'}</Td>
+              <Td className="text-ink-soft flex items-center gap-1 whitespace-nowrap text-sm">
+                {expanded ? (
+                  <ChevronDown size={12} className="text-ink-mute shrink-0" />
+                ) : (
+                  <ChevronRight size={12} className="text-ink-mute shrink-0 opacity-0 group-hover/tr:opacity-100 transition-opacity" />
+                )}
+                {fmtDate(r.createdAt)}
+              </Td>
+              <Td className="text-ink-soft truncate max-w-36">{r.branch?.trim() || '—'}</Td>
                     <Td>
+                      {r.mock && (
+                        <span
+                          className="inline-flex items-center gap-0.5 text-2xs text-warn mr-2"
+                          title="Envío de prueba: no salió nada de verdad."
+                        >
+                          <FlaskConical size={10} />
+                          Demo
+                        </span>
+                      )}
                       {r.status === 'sent' ? (
-                        <span className="inline-flex items-center gap-1 text-vegetal">
-                          <CheckCircle2 size={12} />
-                          <span className="text-xs">Enviado</span>
-                          {r.mock && (
-                            <span
-                              className="inline-flex items-center gap-0.5 text-2xs text-warn"
-                              title="Envío de prueba: no salió nada de verdad."
-                            >
-                              <FlaskConical size={10} />
-                              Demo
-                            </span>
-                          )}
-                        </span>
+                        <StatusPill tone="sent" label="Enviada" />
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-danger" title={r.errorMessage ?? ''}>
-                          <AlertCircle size={12} />
-                          <span className="text-xs">Falló</span>
-                        </span>
+                        <StatusPill
+                          tone="failed"
+                          label="Falló"
+                          title={r.errorMessage ?? undefined}
+                        />
                       )}
                     </Td>
                     <Td className="text-right font-mono tnum text-ink">{r.enabledRecipients}</Td>
@@ -187,6 +183,53 @@ export function History() {
         Los envíos marcados como "Demo" son pruebas: no enviaron mensajes de
         verdad y el panel de resumen no los cuenta.
       </p>
+    </div>
+  )
+}
+
+/** Quiet chips summarizing the loaded history (scope-wide). */
+function SummaryChips({
+  records,
+  branchName,
+}: {
+  records: CampaignRecord[]
+  branchName: string | null
+}) {
+  const real = records.filter((r) => !r.mock)
+  const messages = real.reduce(
+    (n, r) => n + (r.status === 'sent' ? r.enabledRecipients : 0),
+    0,
+  )
+  const dates = real
+    .map((r) => new Date(r.createdAt).getTime())
+    .filter((t) => !Number.isNaN(t))
+  const period =
+    dates.length === 0
+      ? 'sin envíos'
+      : dates.length === 1
+        ? '1 día'
+        : `${new Date(Math.min(...dates)).toLocaleDateString('es-PE', { month: 'short', day: 'numeric' }).replace('.', '')} – ${new Date(Math.max(...dates)).toLocaleDateString('es-PE', { month: 'short', day: 'numeric' }).replace('.', '')}`
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="inline-flex items-center gap-1.5 rounded-sm border border-mist bg-mist-soft px-2.5 py-1 text-2xs text-ink-soft tnum">
+        <span className="font-mono font-semibold text-ink">
+          {real.length.toLocaleString('es-PE')}
+        </span>
+        campaña(s)
+      </span>
+      <span className="inline-flex items-center gap-1.5 rounded-sm border border-mist bg-mist-soft px-2.5 py-1 text-2xs text-ink-soft tnum">
+        <span className="font-mono font-semibold text-ink">
+          {messages.toLocaleString('es-PE')}
+        </span>
+        mensajes
+      </span>
+      <span className="inline-flex items-center gap-1.5 rounded-sm border border-mist bg-mist-soft px-2.5 py-1 text-2xs text-ink-soft tnum">
+        {period}
+      </span>
+      {branchName && (
+        <span className="text-2xs text-ink-mute">· {branchName}</span>
+      )}
     </div>
   )
 }

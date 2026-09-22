@@ -210,7 +210,7 @@ export function GroupTable({ rows, selectedId, onSelect, onToggle }: Props) {
     <div className="rounded-md border border-mist bg-paper overflow-hidden">
       <div className="overflow-x-auto">
         <Table>
-          <Thead className="bg-mist-soft/40">
+          <Thead className="bg-mist-soft/60">
             {table.getHeaderGroups().map((hg) => (
               <tr key={hg.id}>
                 {hg.headers.map((h) => (

@@ -3,10 +3,10 @@
  * bell in the TopBar. Written in plain, non-technical Spanish.
  *
  * MAINTENANCE RULE (also documented in AGENTS.md):
- * every deployment that affects how receptionists work — a new feature,
- * a benefit, or a workflow change — adds one entry here in the SAME commit.
- * Latest first. `relevant: true` entries trigger the "unread" badge and the
- * one-time startup toast.
+ * every deployment that affects how receptionists WORK — a new feature,
+ * a benefit, or a workflow change — adds one entry here in the SAME commit
+ * with `relevant: true` (drives badge + one-time toast). Pure visual/cosmetic
+ * changes go in as `relevant: false` entries with a single short bullet.
  */
 
 export interface ReleaseEntry {
@@ -23,6 +23,16 @@ export interface ReleaseEntry {
 }
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    id: '2026-09-23',
+    date: '23 de septiembre, 2026',
+    title: 'Cambios visuales',
+    relevant: false,
+    items: [
+      'Renovamos la página de inicio: el resumen muestra los últimos 14 días por defecto, y las listas de campañas e historial ahora tienen un look más limpio con sellos de color.',
+      'La pantalla de importación ahora muestra un ejemplo del Excel que debe traer VetPraxis, para que sea más fácil entender qué archivo subir.',
+    ],
+  },
   {
     id: '2026-09-21',
     date: '21 de septiembre, 2026',

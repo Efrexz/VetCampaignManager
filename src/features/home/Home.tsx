@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { FileDown, FileSpreadsheet, ArrowRight, Send } from 'lucide-react'
 import { Button, Card } from '@/shared/components/ui'
 import { DashboardPanel } from './DashboardPanel'
+import { HeroArt } from './HeroArt'
 import { APP } from '@/app/env'
 
 function greeting(): string {
@@ -40,20 +41,25 @@ export default function Home() {
       </h1>
 
       {/* Hero: the outcome of the product, shown on landing */}
-      <Card className="mt-5 p-6">
-        <div>
-          <p className="text-sm text-ink-soft max-w-md leading-relaxed">
-            Importa el reporte de VetPraxis, revisa a quién le escribirás y
-            envía recordatorios a todos tus clientes en un par de minutos.
-          </p>
-          <div className="mt-5 flex items-center gap-3">
-            <Button variant="primary" size="lg" onClick={() => navigate('/campaign')}>
-              Nueva campaña
-              <ArrowRight size={16} />
-            </Button>
-            <span className="text-xs text-ink-mute">
-              Todo se revisa antes de enviar
-            </span>
+      <Card className="mt-5 overflow-hidden">
+        <div className="grid md:grid-cols-2 gap-5 items-stretch">
+          <div className="p-6 flex flex-col justify-center">
+            <p className="text-sm text-ink-soft max-w-md leading-relaxed">
+              Importa el reporte de VetPraxis, revisa a quién le escribirás y
+              envía recordatorios a todos tus clientes en un par de minutos.
+            </p>
+            <div className="mt-5 flex items-center gap-3">
+              <Button variant="primary" size="lg" onClick={() => navigate('/campaign')}>
+                Nueva campaña
+                <ArrowRight size={16} />
+              </Button>
+              <span className="text-xs text-ink-mute">
+                Todo se revisa antes de enviar
+              </span>
+            </div>
+          </div>
+          <div className="p-5 pl-0 hidden md:block">
+            <HeroArt />
           </div>
         </div>
       </Card>

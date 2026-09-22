@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Ban, Loader2, Plus, ShieldOff, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button, Card, Chip, Input, Table, Tbody, Td, Th, Thead, Tr } from '@/shared/components/ui'
+import { Button, Card, Chip, EmptyState, Input, Table, Tbody, Td, Th, Thead, Tr } from '@/shared/components/ui'
 import { useSettingsStore } from '@/shared/stores/settingsStore'
 import { normalizePhone } from '@/lib/phone'
 import { listContactExclusions, setContactFlags } from '@/storage/exports'
@@ -188,11 +188,15 @@ export function ExclusionsTab() {
           </span>
         </div>
         {filtered.length === 0 ? (
-          <p className="text-sm text-ink-mute py-6 text-center">
-            {rows.length === 0
-              ? 'Nadie excluido todavía en esta sede.'
-              : 'Nada coincide con tu búsqueda.'}
-          </p>
+          <EmptyState
+            icon={<ShieldOff size={22} />}
+            title={rows.length === 0 ? 'Nadie excluido todavía en esta sede' : 'Nada coincide con tu búsqueda'}
+            description={
+              rows.length === 0
+                ? 'Cuando registres a un cliente al que no se debe escribir nunca, aparecerá aquí con su nota del motivo.'
+                : 'Prueba con otro nombre, teléfono o parte de la nota.'
+            }
+          />
         ) : (
           <div className="rounded-md border border-danger/30 bg-danger-soft/20 overflow-hidden">
             <Table>

@@ -58,7 +58,7 @@ export const Th = forwardRef<
     ref={ref}
     className={cn(
       'text-left text-2xs font-semibold uppercase tracking-wide text-ink-mute',
-      'px-3 py-2',
+      'px-3 py-2.5 first:pl-5 last:pr-5',
       className,
     )}
     {...props}
@@ -72,7 +72,10 @@ export const Td = forwardRef<
 >(({ className, ...props }, ref) => (
   <td
     ref={ref}
-    className={cn('px-3 py-2 align-middle', className)}
+    className={cn(
+      'px-3 py-2.5 align-middle first:pl-5 last:pr-5 text-base',
+      className,
+    )}
     {...props}
   />
 ))

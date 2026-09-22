@@ -1,19 +1,18 @@
 /**
  * Dashboard panel: aggregates the campaign history (localStorage or Supabase
- * via the storage seam). Views: last 7 days, current month, and the last
- * 6 months with click-to-zoom into any month. Data math lives in
+ * via the storage seam). Views: last 14 days (default), current month, and
+ * the last 6 months with click-to-zoom into any month. Data math lives in
  * `lib/stats.ts`; this component only loads records and renders.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BarChart3, Building2, CheckCircle2, CopyX, Send, ShieldCheck, UserRoundX, Users } from 'lucide-react'
+import { ArrowLeft, BarChart3, Building2, CopyX, Inbox, Send, ShieldCheck, UserRoundX } from 'lucide-react'
 import {
   Card,
   EmptyState,
   Segmented,
   Select,
   Spinner,
-  Stat,
   Table,
   Tbody,
   Td,
@@ -21,15 +20,17 @@ import {
   Thead,
   Tr,
 } from '@/shared/components/ui'
-import { Button } from '@/shared/components/ui'
+import { cn } from '@/lib/cn'
 import { listCampaigns } from '@/storage/exports'
 import type { CampaignRecord } from '@/lib/types'
 import { useTenantStore } from '@/shared/stores/tenantStore'
+import { useSettingsStore } from '@/shared/stores/settingsStore'
 import { HAS_SUPABASE } from '@/integrations/supabase'
 import { filterByBranchScope } from '@/lib/branchScope'
 import {
   aggregateCampaigns,
   elapsedMonthDays,
+  filterByLastDays,
   filterByLastMonths,
   filterByMonth,
   filterByRange,
@@ -41,18 +42,19 @@ import {
 } from '@/lib/stats'
 import { DailyBarsCard } from './DailyBars'
 import { MonthBarsCard } from './MonthBars'
+import { RecentCampaigns } from './RecentCampaigns'
 
 /** View ids shown to the user ('day' exists in stats but is not offered). */
-type RangeView = 'week' | 'month' | 'six'
+type RangeView = 'fourteen' | 'month' | 'six'
 
 const RANGE_OPTIONS: { id: string; label: string }[] = [
-  { id: 'week', label: 'Semana' },
+  { id: 'fourteen', label: '14 días' },
   { id: 'month', label: 'Mes' },
   { id: 'six', label: 'Últimos 6 meses' },
 ]
 
 const RANGE_CAPTION: Record<RangeView, string> = {
-  week: 'Últimos 7 días',
+  fourteen: 'Últimos 14 días',
   month: 'Este mes',
   six: 'Últimos 6 meses',
 }
@@ -65,11 +67,12 @@ export function DashboardPanel() {
   const navigate = useNavigate()
   const [records, setRecords] = useState<CampaignRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [range, setRange] = useState<RangeView>('month')
+  const [range, setRange] = useState<RangeView>('fourteen')
   /** Zoomed-in month ('YYYY-MM') inside the 6-month view, or null. */
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
   /** Owner-only stats scope: null = all sedes (default), number = one sede. */
   const [scopeBranchId, setScopeBranchId] = useState<number | null>(null)
+  const webhookUrl = useSettingsStore((s) => s.settings.webhookUrl)
 
   const tenants = useTenantStore((s) => s.tenants)
   const currentTenantId = useTenantStore((s) => s.currentTenantId)
@@ -104,7 +107,7 @@ export function DashboardPanel() {
   const view = range === 'six' && selectedMonth ? 'month-detail' : range
 
   const windowRecords = useMemo(() => {
-    if (view === 'week') return filterByRange(scoped, 'week')
+    if (view === 'fourteen') return filterByLastDays(scoped, 14)
     if (view === 'month') return filterByRange(scoped, 'month')
     if (view === 'six') return filterByLastMonths(scoped, 6)
     return filterByMonth(scoped, selectedMonth!)
@@ -116,13 +119,14 @@ export function DashboardPanel() {
   )
 
   const dayBuckets = useMemo(() => {
-    if (view === 'week') return groupByDay(windowRecords, 7)
+    if (view === 'fourteen') return groupByDay(scoped, 14)
     if (view === 'month') return groupByDay(windowRecords, elapsedMonthDays())
     if (view === 'month-detail') return groupByDayInMonth(scoped, selectedMonth!)
     return null
   }, [view, windowRecords, scoped, selectedMonth])
 
   const totals = useMemo(() => aggregateCampaigns(windowRecords), [windowRecords])
+  const guarded = totals.invalid + totals.duplicate + totals.excluded
   const branches = useMemo(() => groupByBranch(windowRecords), [windowRecords])
   const hasAnyReal = scoped.some((r) => !r.mock)
 
@@ -151,9 +155,14 @@ export function DashboardPanel() {
         title="Aún no hay campañas registradas"
         description="Cuando envíes tu primera campaña, aquí verás cuántos mensajes salieron, cuántos contactos se excluyeron y cómo va día a día."
         action={
-          <Button variant="primary" size="md" onClick={() => navigate('/campaign')}>
+          <button
+            type="button"
+            onClick={() => navigate('/campaign')}
+            className="inline-flex items-center gap-1.5 rounded-md bg-vegetal px-4 py-2 text-sm font-medium text-paper hover:bg-vegetal-strong transition-colors"
+          >
+            <Send size={14} />
             Nueva campaña
-          </Button>
+          </button>
         }
       />
     )
@@ -164,10 +173,24 @@ export function DashboardPanel() {
     (view === 'month-detail'
       ? monthLabel(selectedMonth!)
       : RANGE_CAPTION[view]) + branchNameSuffix
-  const showValueOnBars = (dayBuckets?.length ?? 0) <= 14
+  const demoMode = !HAS_SUPABASE && !webhookUrl.trim()
 
   return (
     <div className="space-y-4">
+      {demoMode && (
+        <button
+          type="button"
+          onClick={() => navigate('/settings')}
+          className="w-full flex items-center gap-2 rounded-md border border-warn/40 bg-warn-soft/40 px-4 py-2.5 text-xs text-ink-soft hover:bg-warn-soft/70 transition-colors text-left"
+        >
+          <Inbox size={14} className="text-warn shrink-0" />
+          <span>
+            Estás en <strong className="text-warn">modo demo</strong>: los envíos
+            no salen de verdad. <span className="text-warn underline">Configura tu webhook en Ajustes</span> para enviar mensajes reales.
+          </span>
+        </button>
+      )}
+
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-md font-semibold text-ink flex items-center gap-2">
           <BarChart3 size={16} className="text-vegetal" />
@@ -216,17 +239,37 @@ export function DashboardPanel() {
         </button>
       )}
 
-      {/* Selected scope headline numbers */}
-      <Card className="p-5">
-        <p className="text-sm text-ink-soft mb-3">{headline}</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <Stat size="sm" icon={<Send size={14} />} label="Campañas" value={totals.campaigns} tone="vegetal" mono />
-          <Stat size="sm" icon={<Users size={14} />} label="Mensajes" value={fmt(totals.messages)} tone="vegetal" mono />
-          <Stat size="sm" icon={<UserRoundX size={14} />} label="Inválidos" value={fmt(totals.invalid)} tone="neutral" mono />
-          <Stat size="sm" icon={<CopyX size={14} />} label="Duplicados" value={fmt(totals.duplicate)} tone="neutral" mono />
-          <Stat size="sm" icon={<CheckCircle2 size={14} />} label="Excluidos" value={fmt(totals.excluded)} tone="neutral" mono />
+      {/* KPI: scope headline numbers, one card each */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <KpiCard
+          icon={<Send size={14} />}
+          label="Campañas"
+          value={fmt(totals.campaigns)}
+          foot={`enviadas · ${headline.toLowerCase()}`}
+        />
+        <KpiCard
+          icon={<Inbox size={14} />}
+          label="Mensajes"
+          value={fmt(totals.messages)}
+          foot="salieron por WhatsApp"
+        />
+        <KpiCard
+          icon={<ShieldCheck size={14} />}
+          label="Protegidos"
+          value={fmt(guarded)}
+          foot="filtrados antes de enviar"
+          tone="neutral"
+        />
+      </div>
+
+      {/* Import-quality chip row for the selected range */}
+      {guarded > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <FilterChip icon={<UserRoundX size={11} />} value={totals.invalid} label="inválido" />
+          <FilterChip icon={<CopyX size={11} />} value={totals.duplicate} label="duplicado" />
+          <FilterChip icon={<ShieldCheck size={11} />} value={totals.excluded} label="excluido" />
         </div>
-      </Card>
+      )}
 
       {/* Chart: month rows on the 6-month view, daily bars otherwise */}
       {view === 'six' && monthRows ? (
@@ -239,29 +282,18 @@ export function DashboardPanel() {
       ) : dayBuckets ? (
         <DailyBarsCard
           title={
-            view === 'week'
-              ? 'Mensajes por día · esta semana'
+            view === 'fourteen'
+              ? 'Mensajes por día · últimos 14 días'
               : view === 'month'
                 ? 'Mensajes por día · este mes'
                 : `Mensajes por día · ${monthLabel(selectedMonth!)}`
           }
           buckets={dayBuckets}
-          showValues={showValueOnBars}
         />
       ) : null}
 
-      {/* Import-quality counters as a quiet protection line */}
-      {(totals.invalid > 0 || totals.duplicate > 0 || totals.excluded > 0) && (
-        <p className="text-xs text-ink-mute flex items-start gap-1.5 px-1">
-          <ShieldCheck size={13} className="text-vegetal shrink-0 mt-0.5" />
-          <span className="tnum">
-            Filtrado automático ({headline.toLowerCase()}):{' '}
-            {fmt(totals.invalid)} teléfono(s) inválido(s) · {fmt(totals.duplicate)}{' '}
-            duplicado(s) · {fmt(totals.excluded)} excluido(s) por protección (no
-            contactar / avisado hace poco).
-          </span>
-        </p>
-      )}
+      {/* Recent dispatches, independent of the selected range */}
+      <RecentCampaigns records={lastFirst(scoped)} showBranch={scopedBranchId === null && branches.length > 1} />
 
       {/* Branch breakdown — only for the whole-clinic view; a single-sede
           scope makes the comparison table redundant */}
@@ -272,33 +304,122 @@ export function DashboardPanel() {
             Por sede <span className="text-ink-mute">· {headline.toLowerCase()}</span>
           </p>
           <Table>
-            <Thead className="bg-mist-soft/40">
+            <Thead className="bg-mist-soft/60">
               <tr>
                 <Th>Sede</Th>
                 <Th className="text-right">Campañas</Th>
-                <Th className="text-right">Mensajes</Th>
+                <Th className="w-56">Mensajes</Th>
                 <Th className="text-right">Excluidos</Th>
               </tr>
             </Thead>
             <Tbody>
-              {branches.map((b) => (
-                <Tr key={b.branch}>
-                  <Td className="text-ink">{b.branch}</Td>
-                  <Td className="text-right font-mono tnum text-ink-soft">
-                    {b.totals.campaigns}
-                  </Td>
-                  <Td className="text-right font-mono tnum text-ink">
-                    {fmt(b.totals.messages)}
-                  </Td>
-                  <Td className="text-right font-mono tnum text-ink-soft">
-                    {b.totals.excluded}
-                  </Td>
-                </Tr>
-              ))}
+              {branches.map((b) => {
+                const maxMessages = Math.max(...branches.map((x) => x.totals.messages), 1)
+                const pct = Math.round((b.totals.messages / maxMessages) * 100)
+                return (
+                  <Tr
+                    key={b.branch}
+                    onClick={() => navigate('/history')}
+                    className="cursor-pointer hover:bg-mist-soft/40 transition-colors"
+                    title="Ver envíos de esta sede en el historial"
+                  >
+                    <Td className="text-ink text-sm font-medium">{b.branch}</Td>
+                    <Td className="text-right font-mono tnum text-ink-soft">
+                      {b.totals.campaigns}
+                    </Td>
+                    <Td>
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-mono tnum text-ink w-10 text-right">
+                          {fmt(b.totals.messages)}
+                        </span>
+                        <div className="h-1.5 flex-1 rounded-sm bg-mist-soft overflow-hidden">
+                          <div
+                            className="h-full rounded-sm bg-vegetal/70 min-w-1"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </Td>
+                    <Td className="text-right font-mono tnum text-ink-soft">
+                      {b.totals.excluded}
+                    </Td>
+                  </Tr>
+                )
+              })}
             </Tbody>
           </Table>
         </Card>
       )}
     </div>
+  )
+}
+
+/** Most recent first, newest at the top. */
+function lastFirst(records: CampaignRecord[]): CampaignRecord[] {
+  return [...records].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )
+}
+
+/** Large headline card used by the KPI row. */
+function KpiCard({
+  icon,
+  label,
+  value,
+  foot,
+  tone = 'vegetal',
+}: {
+  icon: ReactNode
+  label: string
+  value: string
+  foot?: string
+  tone?: 'vegetal' | 'neutral'
+}) {
+  return (
+    <Card
+      className={cn(
+        'p-4 flex flex-col gap-2 transition-shadow hover:shadow-card-hover',
+      )}
+    >
+      <span
+        className={`flex items-center gap-2 text-2xs uppercase tracking-wide ${
+          tone === 'vegetal' ? 'text-vegetal' : 'text-ink-soft'
+        }`}
+      >
+        <span
+          className={`rounded-sm p-1 ${
+            tone === 'vegetal' ? 'bg-vegetal-soft' : 'bg-mist-soft'
+          }`}
+        >
+          {icon}
+        </span>
+        {label}
+      </span>
+      <span className="font-mono tnum text-2xl font-semibold text-ink leading-none">
+        {value}
+      </span>
+      {foot && <span className="text-2xs text-ink-mute">{foot}</span>}
+    </Card>
+  )
+}
+
+/** Small import-quality chip with an icon and count. */
+function FilterChip({
+  icon,
+  value,
+  label,
+}: {
+  icon: ReactNode
+  value: number
+  label: string
+}) {
+  if (value <= 0) return null
+  const plural = label === 'invalid' ? 'inválido(s)' : `${label}(s)`
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-sm border border-mist bg-mist-soft px-2 py-1 text-2xs text-ink-soft tnum">
+      <span className="text-vegetal">{icon}</span>
+      <span className="font-mono font-semibold text-ink">{fmt(value)}</span>
+      {plural}
+    </span>
   )
 }

@@ -26,14 +26,14 @@ const nav = HAS_SUPABASE
 
 export function Sidebar() {
   return (
-    <aside className="w-sidebar shrink-0 border-r border-mist bg-paper flex flex-col">
-      <div className="h-topbar flex items-center gap-2 px-4 border-b border-mist">
-        <span className="rounded-sm bg-vegetal-soft text-vegetal p-1.5">
+    <aside className="w-sidebar shrink-0 bg-pine flex flex-col">
+      <div className="h-topbar flex items-center gap-2 px-4 border-b border-paper/10">
+        <span className="rounded-sm bg-paper/15 text-paper p-1.5">
           <PawPrint size={18} />
         </span>
         <div className="leading-tight">
-          <p className="text-sm font-semibold text-ink">{APP.clinicName}</p>
-          <p className="text-2xs text-ink-mute">Campañas WhatsApp</p>
+          <p className="text-sm font-semibold text-paper">{APP.clinicName}</p>
+          <p className="text-2xs text-paper/60">Campañas WhatsApp</p>
         </div>
       </div>
 
@@ -47,8 +47,8 @@ export function Sidebar() {
               cn(
                 'flex items-center gap-2.5 px-3 h-9 rounded-sm text-sm transition-colors',
                 isActive
-                  ? 'bg-mist-soft text-ink font-medium'
-                  : 'text-ink-soft hover:bg-mist-soft/60 hover:text-ink',
+                  ? 'bg-paper/15 text-paper font-medium'
+                  : 'text-paper/70 hover:bg-paper/10 hover:text-paper',
               )
             }
           >
@@ -58,11 +58,16 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-4 py-3 border-t border-mist space-y-2">
-        <p className="text-2xs text-ink-mute leading-tight">
+      <div className="px-4 py-3 border-t border-paper/10 space-y-2">
+        <p className="text-2xs text-paper/50 leading-tight flex items-center gap-1.5">
+          <span
+            className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+              HAS_SUPABASE ? 'bg-online' : 'bg-paper/40'
+            }`}
+          />
           {HAS_SUPABASE
             ? 'Conectado a la cuenta de la clínica'
-            : 'Tus datos quedan guardados en esta computadora'}
+            : 'Tus datos quedan guardados solo en esta computadora'}
         </p>
         <SignOutButton />
       </div>
@@ -90,7 +95,7 @@ function SignOutButton() {
       title={auth.userLabel || 'Cerrar sesión'}
       className={cn(
         'flex items-center gap-2.5 w-full px-3 h-9 rounded-sm text-sm transition-colors',
-        'text-ink-soft hover:bg-danger-soft/40 hover:text-danger',
+        'text-paper/70 hover:bg-paper/10 hover:text-danger-soft',
         busy && 'opacity-60',
       )}
     >

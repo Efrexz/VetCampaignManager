@@ -15,6 +15,7 @@ import {
   isRealCampaign,
   monthKey,
   monthLabel,
+  filterByLastDays,
   rangeStart,
   sentByCategory,
   type DayBucket,
@@ -37,6 +38,24 @@ function record(overrides: Partial<CampaignRecord> = {}): CampaignRecord {
     ...overrides,
   }
 }
+
+describe('filterByLastDays', () => {
+  test('keeps the N calendar days back (today included), drops mocks and older', () => {
+    const now = new Date(2026, 8, 17, 12, 0)
+    const recs = [
+      record({ id: 'today', createdAt: '2026-09-17T10:00:00.000Z' }),
+      record({ id: 'dayBack', createdAt: '2026-09-13T10:00:00.000Z' }),
+      record({ id: 'edge', createdAt: '2026-09-11T23:59:59.000Z' }),
+      record({ id: 'mock', mock: true, createdAt: '2026-09-15T10:00:00.000Z' }),
+    ]
+    // 14 days back from Sep 17 → window starts Sep 4 00:00 local
+    const r = filterByLastDays(recs, 14, now)
+    expect(r.map((x) => x.id)).toEqual(['today', 'dayBack', 'edge'])
+
+    // 3 days back → window starts Sep 15, so only today's record fits
+    expect(filterByLastDays(recs, 3, now).map((x) => x.id)).toEqual(['today'])
+  })
+})
 
 describe('isRealCampaign', () => {
   test('mock sends are not real', () => {

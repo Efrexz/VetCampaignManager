@@ -85,10 +85,14 @@ on every `npm install`. Config lives in `.husky/` and `commitlint.config.js`.
   When expanding to other countries, introduce `lib/phoneRules.ts` per-country
   rulesets without changing the function signature.
 
-## Design tokens (do not deviate without reason)
-Defined in `src/styles/tailwind.css` `@theme`. Short version:
+## Design tokens (extend only via tokens)
+Defined in `src/styles/tailwind.css` `@theme`. Trying new visual styles is
+encouraged — but any new color/scale must land as a **token in `@theme`**;
+hardcoding hex values inside components is not allowed. Short version:
 - `cream` surfaces, `paper` cards, `ink` text (warm near-black, not pure zinc)
-- `vegetal` (deep teal/pine) = primary UI
+- `vegetal` (deep teal) = primary UI
+- `pine` (deep green-black) = dark nav surfaces (sidebar); darker than
+  vegetal so vegetal keeps contrast on top of it
 - `clay` (terracotta) = **action accent only** — reserved for the Send / CTA
 - `mist` hairlines/borders
 - Single UI grotesk (Inter Tight) + JetBrains Mono for phones/counts
@@ -112,6 +116,10 @@ same commit — latest first, `relevant: true` to trigger the badge + one-time
 startup toast (badge/toast logic in `src/app/releaseVisibility.ts`, UI in
 `src/shared/components/layout/ReleaseNotesButton.tsx`). Unseen-tracking is
 localStorage-only (`vcm:releases:lastSeen:v1`) — never a database table.
+**`relevant: true` is reserved for workflow changes** (new steps, send rules,
+exclusions, anti-ban protection). Pure visual/cosmetic changes go in as
+`relevant: false` entries with a single short bullet — receptionists see them
+only if they open the bell.
 
 ## Folder map (quick ref)
 ```

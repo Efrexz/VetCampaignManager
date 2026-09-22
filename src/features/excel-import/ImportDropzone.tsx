@@ -1,5 +1,5 @@
 import { useDropzone, type FileRejection } from 'react-dropzone'
-import { FileSpreadsheet, UploadCloud } from 'lucide-react'
+import { FileUp, FileSpreadsheet, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/cn'
 import { Spinner } from '@/shared/components/ui'
@@ -28,7 +28,7 @@ export function ImportDropzone({
     if (accepted.length > 0) void handleFile(accepted[0])
   }
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, open, isDragActive } = useDropzone({
     onDrop,
     accept: {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
@@ -73,6 +73,17 @@ export function ImportDropzone({
               o haz clic para seleccionar · .xlsx o .xls · máx. 10 MB
             </p>
           </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              open()
+            }}
+            className="mt-2 inline-flex items-center gap-2 rounded-md bg-vegetal px-5 h-10 text-sm font-medium text-paper hover:bg-vegetal/90 transition-colors"
+          >
+            <FileUp size={15} />
+            Seleccionar archivo
+          </button>
         </>
       )}
     </div>
