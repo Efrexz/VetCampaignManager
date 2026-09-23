@@ -43,8 +43,7 @@ export function ReleaseNotesButton({ className }: { className?: string }) {
         <Bell size={16} />
         {badge > 0 && (
           <span
-            className="absolute -top-0.5 -right-0.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-clay text-paper text-2xs font-semibold flex items-center justify-center tnum"
-            style={{ fontFamily: 'var(--font-mono)' }}
+            className="absolute -top-0.5 -right-0.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-clay text-paper text-2xs font-semibold flex items-center justify-center tnum font-mono"
           >
             {badge}
           </span>
@@ -93,10 +92,7 @@ function ReleaseNotesModal({
             >
               <div className="flex items-center justify-between gap-2 mb-1">
                 <h3 className="text-sm font-semibold text-ink">{entry.title}</h3>
-                <span
-                  className="text-2xs text-ink-mute shrink-0"
-                  style={{ fontFamily: 'var(--font-mono)' }}
-                >
+                <span className="text-2xs text-ink-mute font-mono tnum shrink-0">
                   {entry.date}
                 </span>
               </div>

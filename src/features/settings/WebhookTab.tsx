@@ -151,7 +151,7 @@ export function WebhookTab() {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder="una clave larga y aleatoria"
-            style={{ fontFamily: 'var(--font-mono)' }}
+            className="font-mono"
           />
         </Card>
       )}

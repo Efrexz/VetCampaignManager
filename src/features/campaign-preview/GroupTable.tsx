@@ -118,10 +118,7 @@ export function GroupTable({ rows, selectedId, onSelect, onToggle }: Props) {
       columnHelper.accessor('phone', {
         header: 'Teléfono',
         cell: ({ row }) => (
-          <span
-            className="text-ink text-sm"
-            style={{ fontFamily: 'var(--font-mono)' }}
-          >
+          <span className="text-ink text-sm font-mono">
             {row.original.phone}
           </span>
         ),
@@ -249,7 +246,9 @@ export function GroupTable({ rows, selectedId, onSelect, onToggle }: Props) {
                   onClick={() => onSelect(r.id)}
                   className={cn(
                     'cursor-pointer transition-colors',
-                    active ? 'bg-vegetal-soft/30' : 'hover:bg-mist-soft/30',
+                    active
+                      ? 'bg-vegetal-soft/40 shadow-[inset_2px_0_0_var(--color-vegetal)]'
+                      : 'hover:bg-mist-soft/30',
                     !r.enabled && 'opacity-50',
                   )}
                 >

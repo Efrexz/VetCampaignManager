@@ -10,6 +10,7 @@ import { ArrowLeft, BarChart3, Building2, CopyX, Inbox, Send, ShieldCheck, UserR
 import {
   Card,
   EmptyState,
+  KpiCard,
   Segmented,
   Select,
   Spinner,
@@ -20,7 +21,6 @@ import {
   Thead,
   Tr,
 } from '@/shared/components/ui'
-import { cn } from '@/lib/cn'
 import { listCampaigns } from '@/storage/exports'
 import type { CampaignRecord } from '@/lib/types'
 import { useTenantStore } from '@/shared/stores/tenantStore'
@@ -358,48 +358,6 @@ export function DashboardPanel() {
 function lastFirst(records: CampaignRecord[]): CampaignRecord[] {
   return [...records].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  )
-}
-
-/** Large headline card used by the KPI row. */
-function KpiCard({
-  icon,
-  label,
-  value,
-  foot,
-  tone = 'vegetal',
-}: {
-  icon: ReactNode
-  label: string
-  value: string
-  foot?: string
-  tone?: 'vegetal' | 'neutral'
-}) {
-  return (
-    <Card
-      className={cn(
-        'p-4 flex flex-col gap-2 transition-shadow hover:shadow-card-hover',
-      )}
-    >
-      <span
-        className={`flex items-center gap-2 text-2xs uppercase tracking-wide ${
-          tone === 'vegetal' ? 'text-vegetal' : 'text-ink-soft'
-        }`}
-      >
-        <span
-          className={`rounded-sm p-1 ${
-            tone === 'vegetal' ? 'bg-vegetal-soft' : 'bg-mist-soft'
-          }`}
-        >
-          {icon}
-        </span>
-        {label}
-      </span>
-      <span className="font-mono tnum text-2xl font-semibold text-ink leading-none">
-        {value}
-      </span>
-      {foot && <span className="text-2xs text-ink-mute">{foot}</span>}
-    </Card>
   )
 }
 

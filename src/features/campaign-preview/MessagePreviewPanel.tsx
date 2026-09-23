@@ -9,7 +9,7 @@ import {
   Tag,
   X,
 } from 'lucide-react'
-import { Chip, EmptyState, MessagePreview } from '@/shared/components/ui'
+import { Card, Chip, EmptyState, MessagePreview } from '@/shared/components/ui'
 import { daysSince, normalizeCategoryName, renderMessageForGroup } from '@/lib/campaign'
 import { joinPetNames } from '@/lib/grouping'
 import type { ContactState, RecipientGroup } from '@/lib/types'
@@ -25,13 +25,13 @@ export function MessagePreviewPanel({ group, onClose }: Props) {
 
   if (!group) {
     return (
-      <div className="rounded-md border border-mist bg-paper p-6">
+      <Card className="p-6">
         <EmptyState
           icon={<MessageSquare size={22} />}
           title="Selecciona un mensaje"
           description="Haz clic en una fila para ver cómo recibirá su mensaje de WhatsApp (con todas sus mascotas si aplica)."
         />
-      </div>
+      </Card>
     )
   }
 
@@ -45,7 +45,7 @@ export function MessagePreviewPanel({ group, onClose }: Props) {
   const contact = group.recipients[0]?.contactState
 
   return (
-    <div className="rounded-md border border-mist bg-paper sticky top-4 overflow-hidden">
+    <Card className="sticky top-4 overflow-hidden">
       {/* Header */}
       <div className="flex items-start justify-between px-4 py-3 border-b border-mist">
         <div className="min-w-0">
@@ -55,10 +55,8 @@ export function MessagePreviewPanel({ group, onClose }: Props) {
           <h3 className="text-md font-semibold text-ink truncate">
             {group.owner}
           </h3>
-          <p className="text-xs text-ink-mute mt-0.5">
-            <span style={{ fontFamily: 'var(--font-mono)' }}>
-              {group.phone}
-            </span>
+          <p className="text-xs text-ink-mute mt-0.5 font-mono">
+            {group.phone}
           </p>
         </div>
         <button
@@ -81,22 +79,23 @@ export function MessagePreviewPanel({ group, onClose }: Props) {
         )}
       </div>
 
-      {/* Template info */}
+      {/* Template info as a clean pill row */}
       <div className="px-4 py-3 border-b border-mist space-y-1.5">
         {msg.template ? (
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-ink-mute">Plantilla:</span>
-            <span className="font-medium text-ink">{templateName}</span>
-            {isDefault && (
-              <span className="inline-flex items-center gap-1 rounded-sm bg-clay-soft text-clay px-1.5 py-0.5 text-2xs font-medium">
-                <Star size={10} />
-                Predeterminada
-              </span>
-            )}
+          <div className="flex items-center gap-2 flex-wrap text-sm">
+            <span className="text-2xs uppercase tracking-wide text-ink-mute">
+              Plantilla
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-sm border border-mist bg-mist-soft px-2 py-0.5 text-2xs text-ink">
+              <span className="font-medium truncate max-w-40">{templateName}</span>
+              {isDefault && (
+                <span className="inline-flex items-center gap-0.5 text-clay">
+                  <Star size={10} />
+                </span>
+              )}
+            </span>
             {boundCategoryName && (
-              <span className="text-2xs text-ink-mute">
-                (para {boundCategoryName})
-              </span>
+              <span className="text-2xs text-ink-mute">para {boundCategoryName}</span>
             )}
           </div>
         ) : (
@@ -179,8 +178,8 @@ export function MessagePreviewPanel({ group, onClose }: Props) {
         </div>
       )}
 
-      {/* WhatsApp bubble preview */}
-      <div className="p-4">
+      {/* WhatsApp bubble preview on a dotted chat surface */}
+      <div className="p-4 bg-dots">
         <MessagePreview
           recipientName={group.owner}
           message={msg.text}
@@ -188,7 +187,7 @@ export function MessagePreviewPanel({ group, onClose }: Props) {
           mediaUrl={msg.template?.media?.data ?? null}
         />
       </div>
-    </div>
+    </Card>
   )
 }
 

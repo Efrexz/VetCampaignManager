@@ -56,9 +56,16 @@
   --shadow-card-hover: 0 2px 4px rgba(26, 26, 23, 0.04),
     0 8px 24px rgba(26, 26, 23, 0.1);
 
-  /* Track sizes */
+/* Track sizes */
   --spacing-sidebar: 16rem;
   --spacing-topbar: 3.5rem;
+}
+
+/* Dotted surface: subtle pattern behind WhatsApp previews (uses tokens only) */
+.bg-dots {
+  background-color: var(--color-mist-soft);
+  background-image: radial-gradient(var(--color-mist) 1px, transparent 1px);
+  background-size: 12px 12px;
 }
 
 /* Base */

@@ -44,7 +44,7 @@ export function TemplatesTab() {
       {/* List */}
       <div className="space-y-3">
         <Button
-          variant="secondary"
+          variant="primary"
           size="sm"
           className="w-full"
           onClick={handleNew}

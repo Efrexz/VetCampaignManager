@@ -134,7 +134,7 @@ export function ExclusionsTab() {
             value={phoneInput}
             onChange={(e) => setPhoneInput(e.target.value)}
             placeholder="917415461, 987654322 - 911111222"
-            style={{ fontFamily: 'var(--font-mono)' }}
+            className="font-mono"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !busy) void handleAdd()
             }}
@@ -211,12 +211,7 @@ export function ExclusionsTab() {
               <Tbody>
                 {filtered.map((row) => (
                   <Tr key={row.phone}>
-                    <Td
-                      className="text-ink"
-                      style={{ fontFamily: 'var(--font-mono)' }}
-                    >
-                      {row.phone}
-                    </Td>
+                    <Td className="text-ink font-mono">{row.phone}</Td>
                     <Td className="text-ink-soft">{row.ownerName || '—'}</Td>
                     <Td className="text-warn">{row.note || '—'}</Td>
                     <Td className="text-right">

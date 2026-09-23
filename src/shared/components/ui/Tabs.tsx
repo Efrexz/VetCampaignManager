@@ -1,3 +1,10 @@
+/**
+ * Pill-style tabs: every tab its own chip; the active one fills in paper
+ * with the card shadow. Sweeps a lighter look than an underline row.
+ *
+ * Segmented: compact single-track switcher (used by the dashboard ranges)
+ * with the vegetal active pill.
+ */
 import { type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
@@ -7,7 +14,7 @@ export interface TabItem {
   icon?: ReactNode
 }
 
-export interface TabsProps {
+interface TabsProps {
   items: TabItem[]
   value: string
   onChange: (id: string) => void
@@ -17,30 +24,31 @@ export interface TabsProps {
 export function Tabs({ items, value, onChange, className }: TabsProps) {
   return (
     <div
-      className={cn(
-        'flex gap-1 border-b border-mist',
-        className,
-      )}
+      role="tablist"
+      className={cn('inline-flex items-center gap-1 flex-wrap', className)}
     >
-      {items.map((item) => {
-        const active = item.id === value
+      {items.map((t) => {
+        const active = t.id === value
         return (
           <button
-            key={item.id}
-            onClick={() => onChange(item.id)}
+            key={t.id}
+            role="tab"
+            aria-selected={active}
+            type="button"
+            onClick={() => onChange(t.id)}
             className={cn(
-              'relative px-3 py-2 text-sm transition-colors',
-              'inline-flex items-center gap-2',
+              'inline-flex items-center gap-1.5 rounded-md px-3.5 h-9 text-sm transition-colors',
               active
-                ? 'text-ink font-medium'
-                : 'text-ink-mute hover:text-ink',
+                ? 'bg-paper text-ink font-medium border border-mist shadow-card'
+                : 'text-ink-soft hover:bg-mist-soft/70 hover:text-ink',
             )}
           >
-            {item.icon}
-            {item.label}
-            {active && (
-              <span className="absolute -bottom-px left-0 right-0 h-0.5 bg-vegetal rounded-full" />
+            {t.icon && (
+              <span className={active ? 'text-vegetal' : 'text-ink-mute'}>
+                {t.icon}
+              </span>
             )}
+            {t.label}
           </button>
         )
       })}
@@ -48,32 +56,34 @@ export function Tabs({ items, value, onChange, className }: TabsProps) {
   )
 }
 
-// Segmented control variant for compact toggles
-export function Segmented({
-  options,
-  value,
-  onChange,
-}: {
-  options: { id: string; label: ReactNode }[]
+export function Segmented({ value, onChange, options, className }: {
   value: string
   onChange: (id: string) => void
+  options: { id: string; label: string }[]
+  className?: string
 }) {
   return (
-    <div className="inline-flex rounded-sm border border-mist bg-paper p-0.5">
-      {options.map((opt) => {
-        const active = opt.id === value
+    <div
+      className={cn(
+        'inline-flex items-center gap-0.5 rounded-md bg-mist-soft p-0.5',
+        className,
+      )}
+    >
+      {options.map((o) => {
+        const active = o.id === value
         return (
           <button
-            key={opt.id}
-            onClick={() => onChange(opt.id)}
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
             className={cn(
-              'px-3 h-7 text-xs rounded-sm transition-colors',
+              'rounded-sm px-3 h-7 text-xs transition-colors',
               active
                 ? 'bg-vegetal text-paper font-medium'
-                : 'text-ink-mute hover:text-ink',
+                : 'text-ink-soft hover:text-ink',
             )}
           >
-            {opt.label}
+            {o.label}
           </button>
         )
       })}

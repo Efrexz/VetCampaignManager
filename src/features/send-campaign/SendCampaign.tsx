@@ -10,7 +10,7 @@ import {
   Tag,
   Users,
 } from 'lucide-react'
-import { Button, Card, Modal, Stat } from '@/shared/components/ui'
+import { Button, Card, KpiCard, Modal } from '@/shared/components/ui'
 import { useCampaignStore } from '@/shared/stores/campaignStore'
 import { useSettingsStore } from '@/shared/stores/settingsStore'
 import { useAuth } from '@/shared/hooks/useAuth'
@@ -260,10 +260,26 @@ export function SendCampaign() {
               ? 'Envío de prueba completado: no salió nada de verdad, pero el flujo quedó registrado.'
               : `Los ${payload?.recipients.length ?? 0} mensajes ya están en camino. Cada cliente los recibirá por WhatsApp en los próximos minutos.`}
           </p>
-          <div className="mt-6 grid grid-cols-3 gap-3 text-sm max-w-md mx-auto">
-            <Stat size="sm" icon={<Users size={14} />} label="Mensajes" value={payload?.recipients.length ?? 0} tone="vegetal" mono />
-            <Stat size="sm" icon={<Tag size={14} />} label="Categorías" value={categoryCounts.length} tone="neutral" mono />
-            <Stat size="sm" icon={<ImageIcon size={14} />} label="Archivo" value={fileName ? fileName.slice(0, 10) + (fileName.length > 10 ? '…' : '') : '—'} tone="neutral" />
+          <div className="mt-6 grid grid-cols-3 gap-3 max-w-md mx-auto">
+            <KpiCard
+              icon={<Users size={14} />}
+              label="Mensajes"
+              value={payload?.recipients.length ?? 0}
+              tone="vegetal"
+            />
+            <KpiCard
+              icon={<Tag size={14} />}
+              label="Categorías"
+              value={categoryCounts.length}
+              tone="neutral"
+            />
+            <KpiCard
+              icon={<ImageIcon size={14} />}
+              label="Archivo"
+              value={fileName ? fileName.slice(0, 10) + (fileName.length > 10 ? '…' : '') : '—'}
+              tone="neutral"
+              className="text-center"
+            />
           </div>
           <div className="mt-8 flex items-center justify-center gap-2">
             <Button variant="secondary" size="md" onClick={() => navigate('/campaign/preview')}>
@@ -316,50 +332,64 @@ export function SendCampaign() {
         </p>
 
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Stat
-            size="sm"
+          <KpiCard
             icon={<Users size={14} />}
-            label="Destinatarios"
+            label="Mensajes"
             value={sendableGroups.length}
             tone="vegetal"
           />
-          <Stat
-            size="sm"
+          <KpiCard
             icon={<Tag size={14} />}
             label="Categorías"
             value={categoryCounts.length}
             tone="neutral"
           />
-          <Stat
-            size="sm"
+          <KpiCard
             icon={<ImageIcon size={14} />}
             label="Con imagen"
             value={withMediaCount}
             tone="neutral"
           />
-          <Stat
-            size="sm"
+          <KpiCard
+            icon={<Send size={14} />}
             label="Modo"
-            value={settings.webhookUrl ? 'Envío real' : 'Solo prueba'}
-            tone={settings.webhookUrl ? 'vegetal' : 'warn'}
+            value={settings.webhookUrl ? 'Real' : 'Prueba'}
+            foot={
+              settings.webhookUrl
+                ? 'los mensajes salen de verdad'
+                : 'nada sale de verdad'
+            }
+            tone={settings.webhookUrl ? 'vegetal' : 'neutral'}
           />
         </div>
 
-        {/* Category breakdown */}
+        {/* Category breakdown with proportional mini-bars (dashboard style) */}
         <div className="mt-5">
-          <p className="text-sm font-medium text-ink mb-2">Desglose por categoría</p>
+          <p className="text-sm text-ink-soft mb-2">
+            Desglose por categoría
+            <span className="text-ink-mute"> · {sendableGroups.length} mensajes</span>
+          </p>
           {categoryCounts.length === 0 ? (
             <p className="text-sm text-ink-mute">Sin destinatarios.</p>
           ) : (
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-1.5">
               {categoryCounts.map((c) => (
-                <span
-                  key={c.name}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-mist-soft border border-mist px-2.5 py-1 text-xs"
-                >
-                  <span className="font-medium text-ink">{c.name}</span>
-                  <span className="text-ink-mute tnum">{c.count}</span>
-                </span>
+                <div key={c.name} className="flex items-center gap-2.5">
+                  <span className="text-xs text-ink w-32 shrink-0 truncate">
+                    {c.name}
+                  </span>
+                  <div className="flex-1 h-4 rounded-sm bg-mist-soft/70 overflow-hidden">
+                    <div
+                      className="h-full rounded-sm bg-vegetal/60"
+                      style={{
+                        width: `${(c.count / Math.max(...categoryCounts.map((x) => x.count), 1)) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs font-mono tnum text-ink w-10 text-right shrink-0">
+                    {c.count}
+                  </span>
+                </div>
               ))}
             </div>
           )}
@@ -391,25 +421,29 @@ export function SendCampaign() {
           </div>
         )}
 
-        {/* Webhook status */}
-        <div className="mt-5 flex items-center gap-2 rounded-sm bg-mist-soft/40 border border-mist p-3 text-xs">
-          {settings.webhookUrl ? (
-            <>
-              <span className="h-2 w-2 rounded-full bg-vegetal shrink-0" />
-              <span className="text-ink-soft">
-                Conexión lista:{' '}
+        {/* Webhook status pill */}
+        <div className="mt-5 flex items-center gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-2xs font-medium ${
+              settings.webhookUrl
+                ? 'bg-vegetal-soft text-vegetal'
+                : 'bg-warn-soft text-warn'
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                settings.webhookUrl ? 'bg-vegetal' : 'bg-warn'
+              }`}
+            />
+            {settings.webhookUrl ? (
+              <>
+                Conexión lista ·{' '}
                 <span className="font-mono">{maskUrl(settings.webhookUrl)}</span>
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="h-2 w-2 rounded-full bg-warn shrink-0" />
-              <span className="text-ink-soft">
-                Sin conexión de envío — modo prueba: no se enviará nada de
-                verdad. Conéctalo en Ajustes → Conexión.
-              </span>
-            </>
-          )}
+              </>
+            ) : (
+              'Sin conexión — modo prueba, conéctalo en Ajustes → Conexión'
+            )}
+          </span>
         </div>
 
         {/* Error state */}

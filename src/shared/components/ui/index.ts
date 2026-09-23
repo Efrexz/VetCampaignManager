@@ -18,4 +18,5 @@ export {
 } from './Table'
 export { MessagePreview } from './MessagePreview'
 export { Stat } from './Stat'
+export { KpiCard } from './KpiCard'
 export { StatusPill } from './StatusPill'

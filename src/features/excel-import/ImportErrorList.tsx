@@ -65,9 +65,7 @@ export function ImportErrorList({ result }: Props) {
                   <Td className="text-ink-mute tnum">{r.rowNumber}</Td>
                   <Td>{r.owner || '—'}</Td>
                   <Td>{r.pet || '—'}</Td>
-                  <Td className="text-ink-mute" style={{ fontFamily: 'var(--font-mono)' }}>
-                    {r.rawPhone || '—'}
-                  </Td>
+                  <Td className="text-ink-mute font-mono">{r.rawPhone || '—'}</Td>
                   <Td className="text-ink-soft">{r.issue}</Td>
                 </Tr>
               ))}

@@ -44,7 +44,7 @@ export function Stepper({ steps, currentIndex, className }: StepperProps) {
             {i < steps.length - 1 && (
               <span
                 className={cn(
-                  'mx-3 h-px w-8 transition-colors',
+                  'mx-3 h-0.5 w-10 rounded-sm transition-colors',
                   i < currentIndex ? 'bg-vegetal' : 'bg-mist',
                 )}
               />
