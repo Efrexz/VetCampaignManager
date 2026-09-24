@@ -18,10 +18,16 @@ export function KpiCard({
   label: string
   value: string | number
   foot?: string
-  /** vegetal: brand color; neutral: quiet counts */
-  tone?: 'vegetal' | 'neutral'
+  /** Icon/label tone: brand (vegetal), quiet counts (neutral), problems. */
+  tone?: 'vegetal' | 'neutral' | 'danger' | 'warn'
   className?: string
 }) {
+  const toneCls = {
+    vegetal: { label: 'text-vegetal', chip: 'bg-vegetal-soft' },
+    neutral: { label: 'text-ink-soft', chip: 'bg-mist-soft' },
+    danger: { label: 'text-danger', chip: 'bg-danger-soft' },
+    warn: { label: 'text-warn', chip: 'bg-warn-soft' },
+  }[tone]
   return (
     <Card
       className={cn(
@@ -32,17 +38,10 @@ export function KpiCard({
       <span
         className={cn(
           'flex items-center gap-2 text-2xs uppercase tracking-wide',
-          tone === 'vegetal' ? 'text-vegetal' : 'text-ink-soft',
+          toneCls.label,
         )}
       >
-        <span
-          className={cn(
-            'rounded-sm p-1',
-            tone === 'vegetal' ? 'bg-vegetal-soft' : 'bg-mist-soft',
-          )}
-        >
-          {icon}
-        </span>
+        <span className={cn('rounded-sm p-1', toneCls.chip)}>{icon}</span>
         {label}
       </span>
       <span className="font-mono tnum text-2xl font-semibold text-ink leading-none">

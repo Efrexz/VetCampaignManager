@@ -32,6 +32,7 @@ export const RELEASE_NOTES: ReleaseEntry[] = [
       'Renovamos la página de inicio: el resumen muestra los últimos 14 días por defecto, y las listas de campañas e historial ahora tienen un look más limpio con sellos de color.',
       'La pantalla de importación ahora muestra un ejemplo del Excel que debe traer VetPraxis, para que sea más fácil entender qué archivo subir.',
       'La sección Ajustes también se renovó visualmente: pestañas y tarjetas más legibles, y ahora cada categoría indica cuántas plantillas tiene asociadas.',
+      'El resumen después de importar el Excel y la pantalla de acceso se diseñaron con el mismo estilo nuevo — más claras de leer.',
     ],
   },
   {
