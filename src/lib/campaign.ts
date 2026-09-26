@@ -169,23 +169,46 @@ export interface SendableRecipient {
 }
 
 /**
- * Pick a template body variant deterministically per phone: same phone always
- * gets the same variant, and a campaign spreads evenly across them. Returns
- * the main body when no variants are configured.
+ * Differentiate template bodies per phone: [main body, ...variants] all
+ * participate in the rotation. Same phone always gets the same variant, a
+ * campaign spreads evenly, and the main body never goes unused.
+ */
+const SEAL = 1_000_003
+
+function phoneIndex(phone: string, count: number): number {
+  const digits = phone.replace(/\D/g, '')
+  let hash = 0
+  for (const ch of digits) {
+    hash = (hash * 10 + (ch.charCodeAt(0) - 48)) % SEAL
+  }
+  return hash % count
+}
+
+/**
+ * Pick the template body for a phone. Main body + variants all rotate
+ * (0 = main body, then variants in order) — no variant starves the base
+ * text, which keeps message patterns varied across a campaign.
  */
 export function pickTemplateBody(
   body: string,
   variants: string[] | undefined,
   phone: string,
 ): string {
-  const list = (variants ?? []).filter((v) => v.trim())
-  if (list.length === 0) return body
-  const digits = phone.replace(/\D/g, '')
-  let hash = 0
-  for (const ch of digits) {
-    hash = (hash * 10 + (ch.charCodeAt(0) - 48)) % 1_000_003
-  }
-  return list[hash % list.length]
+  const list = [body, ...(variants ?? []).filter((v) => v.trim())]
+  return list[phoneIndex(phone, list.length)]
+}
+
+/**
+ * 0-based index of the body a phone will receive (0 = main body, 1+ =
+ * variants). Consumers label them A/B/C.
+ */
+export function templateModelIndex(
+  body: string,
+  variants: string[] | undefined,
+  phone: string,
+): number {
+  const list = [body, ...(variants ?? []).filter((v) => v.trim())]
+  return phoneIndex(phone, list.length)
 }
 
 /**

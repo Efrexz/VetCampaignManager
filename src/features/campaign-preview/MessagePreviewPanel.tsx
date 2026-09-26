@@ -10,7 +10,12 @@ import {
   X,
 } from 'lucide-react'
 import { Card, Chip, EmptyState, MessagePreview } from '@/shared/components/ui'
-import { daysSince, normalizeCategoryName, renderMessageForGroup } from '@/lib/campaign'
+import {
+  daysSince,
+  normalizeCategoryName,
+  renderMessageForGroup,
+  templateModelIndex,
+} from '@/lib/campaign'
 import { joinPetNames } from '@/lib/grouping'
 import type { ContactState, RecipientGroup } from '@/lib/types'
 
@@ -37,6 +42,13 @@ export function MessagePreviewPanel({ group, onClose }: Props) {
 
   const msg = renderMessageForGroup(group, categories, templates)
   const templateName = msg.template?.name
+  // Which body variant this phone gets (A = main, B/C = alternates).
+  const variantLetter =
+    msg.template?.variants && msg.template.variants.length > 0
+      ? String.fromCharCode(
+          65 + templateModelIndex(msg.template.body, msg.template.variants, group.phone),
+        )
+      : null
   const isDefault = msg.template?.isDefault ?? false
   const boundCategoryName =
     msg.template && msg.template.categoryId
@@ -74,6 +86,11 @@ export function MessagePreviewPanel({ group, onClose }: Props) {
         <span className="text-ink-soft">Mascotas:</span>
         <span className="font-medium text-ink">{joinPetNames(group.pets) || '—'}</span>
         <Chip tone="neutral">{group.category}</Chip>
+        {variantLetter && (
+          <Chip tone="neutral" title=" versión del mensaje que le toca a este cliente (rotación anti-bloqueo)">
+            Versión {variantLetter}
+          </Chip>
+        )}
         {group.pets.length > 1 && (
           <Chip tone="vegetal">{group.pets.length} mascotas</Chip>
         )}

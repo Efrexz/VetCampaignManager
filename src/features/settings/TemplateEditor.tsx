@@ -238,73 +238,79 @@ export function TemplateEditor({ template, onDelete }: Props) {
       {/* Attached image */}
       <TemplateMediaPicker media={media} onChange={setMedia} />
 
-      {/* Body variants (anti-ban text variation) — highlighted on purpose */}
-      <div className="rounded-md border-l-4 border-vegetal border-y border-r border-mist bg-vegetal-soft/25 p-4">
-        <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
-          <div className="flex items-center gap-2">
+      {/* Body variants (anti-ban text variation) — highlighted on purpose.
+          The main body card stays fixed; each alternate is its own numbered
+          card so nothing ever looks like it merged into the main message. */}
+      <div className="rounded-md border-l-4 border-vegetal border-y border-r border-mist bg-vegetal-soft/25 p-4 space-y-3">
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
             <h4 className="text-sm font-semibold text-ink">
               Variaciones del mensaje
             </h4>
             {variants.length > 0 ? (
               <Chip tone="vegetal">
-                activo — {variants.length + 1} textos en rotación
+                activo — {variants.length + 1} versiones en rotación
               </Chip>
             ) : (
               <Chip tone="warn">Opcional · recomendado</Chip>
             )}
           </div>
-          {variants.length === 0 && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setVariants((vs) => [...vs, ''])}
-            >
-              <Plus size={12} />
-              Agregar variante
-            </Button>
-          )}
-        </div>
-        <p className="text-xs text-ink-soft mb-3 leading-relaxed">
-          Los mensajes 100% idénticos son lo que hace que WhatsApp bloquee a
-          un número. Agrega 1 o 2 versiones alternativas del mensaje: a cada
-          cliente le tocará una de ellas según su número (y siempre la misma
-          para él). Opcional — si no agregas ninguna, todo sigue igual.
-        </p>
-        {variants.length === 0 ? (
-          <p className="text-2xs text-ink-mute">
-            Sin variantes: todos los clientes reciben el mensaje principal.
+          <p className="text-xs text-ink-soft mt-1 leading-relaxed">
+            Los mensajes 100% idénticos son lo que hace que WhatsApp bloquee a
+            un número. Agrega versiones alternativas: a cada cliente le toca
+            UNA según su número, siempre la misma para él, y{' '}
+            <strong>el mensaje de arriba sigue participando</strong> en la
+            rotación (ninguna versión deja de usarse).
           </p>
-        ) : (
-          <div className="space-y-3">
-            {variants.map((v, i) => (
-              <div key={i} className="bg-paper rounded-md border border-mist p-3">
-                <label className="flex items-center justify-between text-2xs text-ink-mute mb-1">
-                  <span>Variante {i + 1} — se reparte entre todos los clientes</span>
-                  <button
-                    type="button"
-                    className="hover:text-danger font-medium"
-                    onClick={() =>
-                      setVariants((vs) => vs.filter((_, j) => j !== i))
-                    }
-                  >
-                    Quitar
-                  </button>
-                </label>
-                <Textarea
-                  value={v}
-                  onChange={(e) =>
-                    setVariants((vs) =>
-                      vs.map((x, j) => (j === i ? e.target.value : x)),
-                    )
-                  }
-                  rows={4}
-                  className="text-sm"
-                  placeholder="Una versión con otras palabras, mismos datos {{owner}}, {{pets}}, {{category}}…"
-                />
-              </div>
-            ))}
+        </div>
+
+        {/* Main body card (fixed) */}
+        <div className="rounded-md border border-vegetal/30 bg-paper p-3">
+          <span className="text-2xs font-semibold uppercase tracking-wide text-vegetal">
+            Versión A — mensaje principal
+          </span>
+        </div>
+
+        {/* Alternate cards */}
+        {variants.map((v, i) => (
+          <div
+            key={i}
+            className="bg-paper rounded-md border border-mist p-3"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-2xs font-semibold uppercase tracking-wide text-ink-mute">
+                {`Versión ${String.fromCharCode(66 + i)}`}
+              </span>
+              <button
+                type="button"
+                className="hover:text-danger font-medium text-2xs"
+                onClick={() => setVariants((vs) => vs.filter((_, j) => j !== i))}
+              >
+                Quitar
+              </button>
+            </div>
+            <Textarea
+              value={v}
+              onChange={(e) =>
+                setVariants((vs) =>
+                  vs.map((x, j) => (j === i ? e.target.value : x)),
+                )
+              }
+              rows={4}
+              className="text-sm"
+              placeholder="Una versión con otras palabras, mismos datos {{owner}}, {{pets}}, {{category}}…"
+            />
           </div>
-        )}
+        ))}
+
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setVariants((vs) => [...vs, ''])}
+        >
+          <Plus size={12} />
+          Agregar variación (entra a la rotación junto a la principal)
+        </Button>
       </div>
 
       {media && body.length > CAPTION_WARN_CHARS && (

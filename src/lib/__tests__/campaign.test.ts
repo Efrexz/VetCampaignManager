@@ -9,6 +9,7 @@ import {
   recentlyContactedFor,
   renderMessageForGroup,
   resolveTemplateByCategoryName,
+  templateModelIndex,
 } from '../campaign'
 import { groupRecipients } from '../grouping'
 import type {
@@ -78,20 +79,36 @@ describe('pickTemplateBody (anti-ban variants)', () => {
     )
   })
 
-  test('same phone always resolves to the same variant', () => {
+  test('same phone always resolves to the same body', () => {
     const a = pickTemplateBody('P', variants, '+51980000000')
     const b = pickTemplateBody('P', variants, '+51980000000')
     expect(a).toBe(b)
-    expect(variants).toContain(a)
+    expect(['P', ...variants]).toContain(a)
   })
 
-  test('different phones spread across variants', () => {
+  test('main body participates in the rotation (never starves)', () => {
     const used = new Set(
       Array.from({ length: 24 }, (_, i) =>
-        pickTemplateBody('P', variants, `+51980000${String(i).padStart(3, '0')}`),
+        pickTemplateBody('P', ['VAR B'], `+51980000${String(i).padStart(3, '0')}`),
       ),
     )
-    expect(used.size).toBe(3)
+    // With 1 variant there are 2 rotating bodies; both must appear.
+    expect(used.size).toBe(2)
+    expect(used.has('P')).toBe(true)
+    expect(used.has('VAR B')).toBe(true)
+  })
+
+  test('index matches the picked body (A/B/C labeling)', () => {
+    const phones = Array.from(
+      { length: 12 },
+      (_, i) => `+51980000${String(i).padStart(3, '0')}`,
+    )
+    for (const phone of phones) {
+      const idx = templateModelIndex('P', variants, phone)
+      expect(pickTemplateBody('P', variants, phone)).toBe(
+        ['P', ...variants][idx],
+      )
+    }
   })
 })
 
