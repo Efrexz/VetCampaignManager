@@ -41,3 +41,6 @@ samples/
 
 # opencode agent working files (session plans, etc.)
 .opencode/
+
+# Temporary session plan file (deleted when the session completes; never in git)
+PLAN-ENTREGAS.md
