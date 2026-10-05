@@ -2,8 +2,30 @@ import { describe, expect, test } from 'vitest'
 import {
   DEMO_CONTEXT,
   extractVariables,
+  firstName,
   renderTemplate,
 } from '../template'
+
+describe('firstName', () => {
+  test('keeps only the first token of a full name', () => {
+    expect(firstName('María Fernanda Ríos Quispe')).toBe('María')
+    expect(firstName('  José   Carlos ')).toBe('José')
+  })
+
+  test('passes through single names and keeps empty empty', () => {
+    expect(firstName('Ana')).toBe('Ana')
+    expect(firstName('')).toBe('')
+    expect(firstName('   ')).toBe('')
+  })
+
+  test('renderTemplate resolves {{owner}} to the first name', () => {
+    const r = renderTemplate('Hola {{owner}} 👋', {
+      ...DEMO_CONTEXT,
+      owner: 'María Fernanda Ríos Quispe',
+    })
+    expect(r.text).toBe('Hola María 👋')
+  })
+})
 
 describe('renderTemplate', () => {
   test('replaces known variables with their resolved values', () => {

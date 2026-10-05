@@ -15,6 +15,15 @@ export interface VariableDef {
   resolve: (ctx: RenderContext) => string
 }
 
+/**
+ * First name of a full client name, so WhatsApp greetings read closer:
+ * "María Ríos Quispe" → "María". A single-word name stays as-is; empty stays
+ * empty (the renderer reports it like any other empty variable).
+ */
+export function firstName(fullName: string): string {
+  return fullName.trim().split(/\s+/)[0] ?? ''
+}
+
 export interface RenderContext {
   owner: string
   pet: string
@@ -26,7 +35,10 @@ export interface RenderContext {
 }
 
 export const VARIABLES: VariableDef[] = [
-  { key: 'owner', label: 'Propietario', resolve: (c) => c.owner },
+  // {{owner}} renders the client's FIRST name — "Hola {{owner}} 👋" greets
+  // "María", not the full "María Ríos Quispe", to keep messages short and
+  // personal. The full name is still available on group.owner for previews.
+  { key: 'owner', label: 'Propietario', resolve: (c) => firstName(c.owner) },
   { key: 'pet', label: 'Mascota', resolve: (c) => c.pet },
   { key: 'pets', label: 'Mascotas (todas)', resolve: (c) => c.pets || c.pet },
   { key: 'category', label: 'Categoría', resolve: (c) => c.category },
@@ -106,7 +118,8 @@ export function contextFromRecipient(r: Recipient): RenderContext {
 
 /** Synthetic demo context used by the template editor live preview. */
 export const DEMO_CONTEXT: RenderContext = {
-  owner: 'María',
+  // Intentionally a FULL name: shows that {{owner}} renders just "María".
+  owner: 'María Fernanda Ríos Quispe',
   pet: 'Rocky',
   pets: 'Rocky y Canuta',
   category: 'Vacuna',

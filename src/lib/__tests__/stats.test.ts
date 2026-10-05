@@ -4,7 +4,6 @@ import {
   dayBucketLabel,
   dayKey,
   daysInMonthKey,
-  elapsedMonthDays,
   filterByLastMonths,
   filterByMonth,
   filterByRange,
@@ -183,13 +182,6 @@ describe('groupByDay', () => {
     expect(mid.totals.messages).toBe(5) // yesterday's real send
     expect(prev.totals.messages).toBe(0)
     expect(buckets[buckets.length - 1].key).toBe('2026-09-17')
-  })
-})
-
-describe('elapsedMonthDays', () => {
-  test('equals the day-of-month (today included)', () => {
-    expect(elapsedMonthDays(new Date(2026, 8, 17, 23, 59))).toBe(17)
-    expect(elapsedMonthDays(new Date(2026, 8, 1, 0, 1))).toBe(1)
   })
 })
 

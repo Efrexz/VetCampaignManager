@@ -1,6 +1,6 @@
 /**
  * Dashboard panel: aggregates the campaign history (localStorage or Supabase
- * via the storage seam). Views: last 14 days (default), current month, and
+ * via the storage seam). Views: last 14 days (default), last 30 days, and
  * the last 6 months with click-to-zoom into any month. Data math lives in
  * `lib/stats.ts`; this component only loads records and renders.
  */
@@ -29,11 +29,9 @@ import { HAS_SUPABASE } from '@/integrations/supabase'
 import { filterByBranchScope } from '@/lib/branchScope'
 import {
   aggregateCampaigns,
-  elapsedMonthDays,
   filterByLastDays,
   filterByLastMonths,
   filterByMonth,
-  filterByRange,
   groupByBranch,
   groupByDay,
   groupByDayInMonth,
@@ -45,17 +43,17 @@ import { MonthBarsCard } from './MonthBars'
 import { RecentCampaigns } from './RecentCampaigns'
 
 /** View ids shown to the user ('day' exists in stats but is not offered). */
-type RangeView = 'fourteen' | 'month' | 'six'
+type RangeView = 'fourteen' | 'thirty' | 'six'
 
 const RANGE_OPTIONS: { id: string; label: string }[] = [
   { id: 'fourteen', label: '14 días' },
-  { id: 'month', label: 'Mes' },
+  { id: 'thirty', label: 'Últimos 30 días' },
   { id: 'six', label: 'Últimos 6 meses' },
 ]
 
 const RANGE_CAPTION: Record<RangeView, string> = {
   fourteen: 'Últimos 14 días',
-  month: 'Este mes',
+  thirty: 'Últimos 30 días',
   six: 'Últimos 6 meses',
 }
 
@@ -108,7 +106,7 @@ export function DashboardPanel() {
 
   const windowRecords = useMemo(() => {
     if (view === 'fourteen') return filterByLastDays(scoped, 14)
-    if (view === 'month') return filterByRange(scoped, 'month')
+    if (view === 'thirty') return filterByLastDays(scoped, 30)
     if (view === 'six') return filterByLastMonths(scoped, 6)
     return filterByMonth(scoped, selectedMonth!)
   }, [scoped, view, selectedMonth])
@@ -120,10 +118,10 @@ export function DashboardPanel() {
 
   const dayBuckets = useMemo(() => {
     if (view === 'fourteen') return groupByDay(scoped, 14)
-    if (view === 'month') return groupByDay(windowRecords, elapsedMonthDays())
+    if (view === 'thirty') return groupByDay(scoped, 30)
     if (view === 'month-detail') return groupByDayInMonth(scoped, selectedMonth!)
     return null
-  }, [view, windowRecords, scoped, selectedMonth])
+  }, [view, scoped, selectedMonth])
 
   const totals = useMemo(() => aggregateCampaigns(windowRecords), [windowRecords])
   const guarded = totals.invalid + totals.duplicate + totals.excluded
@@ -284,8 +282,8 @@ export function DashboardPanel() {
           title={
             view === 'fourteen'
               ? 'Mensajes por día · últimos 14 días'
-              : view === 'month'
-                ? 'Mensajes por día · este mes'
+              : view === 'thirty'
+                ? 'Mensajes por día · últimos 30 días'
                 : `Mensajes por día · ${monthLabel(selectedMonth!)}`
           }
           buckets={dayBuckets}

@@ -4,9 +4,9 @@
  * holds a synthetic "default" tenant.
  *
  * Branch rule (migration 0003): the current user's `tenant_members.branch_id`
- * is NULL for owner/admin (they see ALL branches of the tenant, and the first
- * branch is selected by default) or a concrete branch id for branch-bound
- * members (receptionists).
+ * is NULL for owner/admin (they see ALL branches of the tenant, and the admin
+ * default sede is selected — see ADMIN_DEFAULT_BRANCH_NAME) or a concrete
+ * branch id for branch-bound members (receptionists).
  */
 import { create } from 'zustand'
 import { HAS_SUPABASE, requireSupabase } from '@/integrations/supabase'
@@ -47,6 +47,13 @@ interface TenantState {
 }
 
 const LOCAL_TENANT_ID = 'local-tenant'
+
+/**
+ * Preferred default sede for owner/admin members. The clinic has a single
+ * admin, who works at "San Martin"; the fallback is the first branch
+ * (alphabetical order) in case the sede was renamed.
+ */
+const ADMIN_DEFAULT_BRANCH_NAME = 'San Martin'
 const LOCAL_TENANT: Tenant = {
   id: LOCAL_TENANT_ID,
   slug: 'local',
@@ -168,13 +175,15 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     const bound = get().tenants.find((t) => t.id === currentTenantId)?.branchId
     // Branch-bound members land in their sede; owners/admins (branchId null)
     // keep their current selection when still valid, else default to the
-    // first branch. They may switch from the top bar.
+    // admin's preferred sede. They may switch from the top bar.
     const prev = get().currentBranchId
+    const adminDefault =
+      branches.find((b) => b.name === ADMIN_DEFAULT_BRANCH_NAME)?.id
     const currentBranchId =
       bound ??
       (prev !== null && branches.some((b) => b.id === prev)
         ? prev
-        : (branches[0]?.id ?? null))
+        : (adminDefault ?? branches[0]?.id ?? null))
     set({ branches, currentBranchId })
   },
 

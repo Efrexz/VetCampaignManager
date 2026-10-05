@@ -257,11 +257,6 @@ export function groupByDayInMonth(
   }))
 }
 
-/** Number of calendar days elapsed in the current month (today included). */
-export function elapsedMonthDays(now = new Date()): number {
-  return now.getDate()
-}
-
 /** 'YYYY-MM' in the browser's local timezone. */
 export function monthKey(iso: string): string {
   const d = new Date(iso)

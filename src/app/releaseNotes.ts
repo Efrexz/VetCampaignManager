@@ -24,6 +24,16 @@ export interface ReleaseEntry {
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    id: '2026-10-05',
+    date: '5 de octubre, 2026',
+    title: 'Mensajes más cercanos y resumen más estable',
+    relevant: false,
+    items: [
+      'Los mensajes ahora saludan con el primer nombre ("Hola María 👋") en vez del nombre completo, para que suenen más naturales.',
+      'El resumen pasó de "Este mes" a "Últimos 30 días": siempre se ven 30 barras y ya no aparecen barras anchas al inicio del mes.',
+    ],
+  },
+  {
     id: '2026-09-23',
     date: '23 de septiembre, 2026',
     title: 'Cambios visuales',
