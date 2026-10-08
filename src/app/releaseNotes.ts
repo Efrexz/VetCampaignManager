@@ -24,6 +24,17 @@ export interface ReleaseEntry {
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    id: '2026-10-07',
+    date: '7 de octubre, 2026',
+    title: 'Nueva sección Ayuda 🆘',
+    relevant: true,
+    items: [
+      'En la barra lateral ahora tienes "Ayuda": respuestas cortas a las dudas de todos los días, sin tecnicismos.',
+      'Lo más importante está al inicio: cómo proteger el WhatsApp de la clínica (grupos chicos de menos de 30, ~1 hora y media entre campañas, y siempre con 2 variantes de texto).',
+      'Antes de mandar una campaña grande o de reintentar un envío que falló, échale una pasada a la Ayuda: ahí está el porqué de cada regla.',
+    ],
+  },
+  {
     id: '2026-10-05',
     date: '5 de octubre, 2026',
     title: 'Mensajes más cercanos y resumen más estable',

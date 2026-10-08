@@ -28,6 +28,9 @@ const SettingsPage = lazy(() =>
 const HistoryPage = lazy(() =>
   import('@/features/history/History').then((m) => ({ default: m.History })),
 )
+const AyudaPage = lazy(() =>
+  import('@/features/ayuda/Ayuda').then((m) => ({ default: m.Ayuda })),
+)
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const auth = useAuth()
@@ -68,6 +71,7 @@ export function AppRoutes() {
         <Route path="campaign/send" element={<SendCampaignPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="history" element={<HistoryPage />} />
+        <Route path="ayuda" element={<AyudaPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

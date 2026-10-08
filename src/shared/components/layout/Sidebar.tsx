@@ -7,6 +7,7 @@ import {
   History,
   LogOut,
   Loader2,
+  CircleHelp,
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/cn'
@@ -18,6 +19,7 @@ const baseNav = [
   { to: '/', label: 'Inicio', icon: Home, end: true },
   { to: '/campaign', label: 'Campaña', icon: Send, end: false },
   { to: '/settings', label: 'Ajustes', icon: Settings, end: false },
+  { to: '/ayuda', label: 'Ayuda', icon: CircleHelp, end: false },
 ] as const
 
 const nav = HAS_SUPABASE
