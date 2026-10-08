@@ -121,11 +121,12 @@ export const FAQ_SECTIONS: FaqSection[] = [
         id: 'seg-espera',
         question: '¿Cada cuánto puedo mandar otra campaña?',
         paragraphs: [
-          'Deja pasar alrededor de 1 hora y media entre una campaña y la siguiente. Si terminaste a las 10:00, la próxima que salga cerca de las 11:30.',
-          'El ritmo pausado se ve natural para WhatsApp; las ráfagas son lo que dispara los bloqueos.',
+          'La espera depende del tamaño de lo que apenas mandaste: si fue una campaña de MÁS de 15 clientes, espera alrededor de 1 hora y media antes de la siguiente. Con grupos chicos (menos de 15) basta con unos 20 minutos, y siempre verifica que la anterior ya terminó de salir.',
+          'La app te ayuda: al presionar "Enviar campaña" dentro de esos 20 minutos aparece un aviso que te pide revisar el WhatsApp de la sede antes de continuar. Con tandas grandes es más estricto todavía.',
         ],
         tips: [
-          { text: '1½ horas entre campañas — usa el reloj del celular para recordar.', kind: SI },
+          { text: 'Campaña de más de 15 clientes → espera ~1 hora y media.', kind: SI },
+          { text: 'Grupo chico (menos de 15) → ~20 min y confirma que ya terminó de salir.', kind: SI },
         ],
       },
       {

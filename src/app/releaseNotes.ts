@@ -24,6 +24,18 @@ export interface ReleaseEntry {
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    id: '2026-10-08',
+    date: '8 de octubre, 2026',
+    title: 'Aviso al enviar dos campañas seguidas ⏱️',
+    relevant: true,
+    items: [
+      'Si mandas una campaña y vas a mandar otra menos de 20 minutos después, la app te muestra un aviso que te pide revisar el WhatsApp de la sede: confirma que la anterior ya terminó de salir.',
+      'Importante para no bloquear el número: si la campaña anterior fue grande (más de 15 clientes), espera alrededor de 1 hora y media. Con grupos chicos, 20 minutos alcanza.',
+      'Los envíos que dieron error no cuentan para el aviso: reintentar un envío fallido es normal.',
+      'Más detalle en la nueva sección Ayuda → "Enviar con seguridad".',
+    ],
+  },
+  {
     id: '2026-10-07',
     date: '7 de octubre, 2026',
     title: 'Nueva sección Ayuda 🆘',

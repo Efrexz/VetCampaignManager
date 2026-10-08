@@ -5,25 +5,33 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  Clock,
   Image as ImageIcon,
   Send,
   Tag,
   Users,
+  ShieldAlert,
 } from 'lucide-react'
 import { Button, Card, KpiCard, Modal } from '@/shared/components/ui'
 import { useCampaignStore } from '@/shared/stores/campaignStore'
 import { useSettingsStore } from '@/shared/stores/settingsStore'
+import { useTenantStore } from '@/shared/stores/tenantStore'
 import { useAuth } from '@/shared/hooks/useAuth'
 import {
+  BIG_CAMPAIGN_MIN,
   buildGroupPayload,
   buildSendableGroups,
+  campaignCooldown,
+  type CampaignCooldown,
   type N8nCampaignPayload,
 } from '@/lib/campaign'
 import { groupRecipients, joinPetNames } from '@/lib/grouping'
 import { newId } from '@/lib/id'
 import { maskUrl } from '@/lib/format'
 import { sendCampaign } from '@/integrations/n8n'
+import { HAS_SUPABASE } from '@/integrations/supabase'
 import {
+  listCampaigns,
   recordCampaign,
   recordAudit,
   markContacted,
@@ -58,6 +66,9 @@ export function SendCampaign() {
   const [sentAt, setSentAt] = useState<Date | null>(null)
   /** True when the send was a demo (mock webhook) — honest success text. */
   const [mockSend, setMockSend] = useState(false)
+  /** Anti-ban guard: last successful send of the ACTIVE branch, if any. */
+  const [cooldown, setCooldown] = useState<CampaignCooldown | null>(null)
+  const [cooldownModalOpen, setCooldownModalOpen] = useState(false)
 
   // Build the sendable groups + payload up front (memoized).
   const grouped = useMemo(
@@ -106,6 +117,27 @@ export function SendCampaign() {
   )
 
   // Guard: redirect back if no campaign or no sendable recipients.
+  const currentBranchId = useTenantStore((s) => s.currentBranchId)
+  useEffect(() => {
+    let alive = true
+    // Cooldown scope: Supabase mode → only campaigns of the ACTIVE branch
+    // (each sede has its own WhatsApp number, so another sede's sends don't
+    // trigger this guard); localStorage mode → all (single number).
+    listCampaigns(20)
+      .then((recs) => {
+        if (!alive) return
+        setCooldown(
+          campaignCooldown(recs, HAS_SUPABASE ? (currentBranchId ?? -1) : null),
+        )
+      })
+      .catch(() => {
+        /* history unavailable → guard simply doesn't apply */
+      })
+    return () => {
+      alive = false
+    }
+  }, [currentBranchId])
+
   useEffect(() => {
     if (!result) {
       toast.info('Importa un archivo Excel primero.')
@@ -234,6 +266,20 @@ export function SendCampaign() {
   const handleNewCampaign = () => {
     resetStore()
     navigate('/campaign')
+  }
+
+  /**
+   * "Enviar campaña" entry point. When the active branch ended a successful
+   * send recently (< 20 min), the attention modal comes FIRST — its job is
+   * making the user verify the previous campaign finished before proceeding.
+   */
+  const openSendFlow = () => {
+    if (status === 'sending' || sendableGroups.length === 0) return
+    if (cooldown?.within) {
+      setCooldownModalOpen(true)
+      return
+    }
+    setConfirmOpen(true)
   }
 
   // ── Success screen ──
@@ -457,6 +503,19 @@ export function SendCampaign() {
           </div>
         )}
 
+        {/* Cooldown hint — gentle pacing reminder, never blocking */}
+        {cooldown && status !== 'sending' && (
+          <p className="mt-3 flex items-center gap-1.5 text-2xs text-ink-mute">
+            <Clock size={11} className="shrink-0" />
+            Última campaña de esta sede: hace {cooldown.sinceMinutes} min (
+            {cooldown.lastSize === 1
+              ? '1 mensaje'
+              : `${cooldown.lastSize} mensajes`}
+            ) · ritmo recomendado: ~{cooldown.recommendedMinutes} min entre
+            campañas
+          </p>
+        )}
+
         <div className="mt-6 flex items-center justify-end gap-2 border-t border-mist pt-4">
           {status === 'error' && (
             <Button variant="secondary" size="md" onClick={() => setStatus('idle')}>
@@ -466,7 +525,7 @@ export function SendCampaign() {
           <Button
             variant="primary"
             size="lg"
-            onClick={() => setConfirmOpen(true)}
+            onClick={openSendFlow}
             disabled={status === 'sending' || sendableGroups.length === 0}
           >
             {status === 'sending' ? 'Enviando…' : 'Enviar campaña'}
@@ -474,6 +533,69 @@ export function SendCampaign() {
           </Button>
         </div>
       </Card>
+
+      {/* Anti-ban attention modal: fires when the branch sent successfully
+          < 20 min ago. Not a block — an informed confirm step. */}
+      {cooldown && (
+        <Modal
+          open={cooldownModalOpen}
+          onClose={() => setCooldownModalOpen(false)}
+          title={
+            cooldown.lastSize >= BIG_CAMPAIGN_MIN
+              ? 'La anterior fue grande — envía con calma'
+              : 'Enviaste una campaña hace poco'
+          }
+          description={
+            cooldown.lastSize >= BIG_CAMPAIGN_MIN
+              ? `Tu última campaña fue de ${cooldown.lastSize} mensajes. Después de una tanda grande, lo recomendado es esperar ~${cooldown.recommendedMinutes} min: es la regla que evita el bloqueo del número.`
+              : null
+          }
+          footer={
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCooldownModalOpen(false)}
+              >
+                Volver
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setCooldownModalOpen(false)
+                  setConfirmOpen(true)
+                }}
+              >
+                Aceptar y continuar
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <p className="flex items-start gap-2 text-sm text-warn">
+              <ShieldAlert size={15} className="mt-0.5 shrink-0" />
+              <span>
+                Última campaña exitosa de esta sede: hace{' '}
+                {cooldown.sinceMinutes} min ({cooldown.lastSize} mensaje
+                {cooldown.lastSize === 1 ? '' : 's'}).
+              </span>
+            </p>
+            <p className="text-sm text-ink-soft leading-relaxed">
+              Antes de continuar, <strong className="text-ink">verifica que
+              la campaña anterior ya terminó</strong>: entra al WhatsApp de la
+              sede y confirma que los últimos mensajes ya no están llegando.
+            </p>
+            <p className="text-xs text-ink-mute leading-relaxed">
+              {cooldown.lastSize >= BIG_CAMPAIGN_MIN
+                ? `Con tandas grandes lo mejor es esperar alrededor de ${cooldown.recommendedMinutes} minutos entre campañas.`
+                : 'Si ya terminó y es una campaña pequeña, continúa con confianza; si puedes esperar un poco más, mejor todavía.'}
+              {' '}Los envíos que fallaron no cuentan: reintentar un error es
+              normal.
+            </p>
+          </div>
+        </Modal>
+      )}
 
       {/* Confirmation modal */}
       <Modal

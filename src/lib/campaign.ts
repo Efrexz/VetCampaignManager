@@ -5,6 +5,7 @@
  * and the n8n payload builder (Phase 4).
  */
 import type {
+  CampaignRecord,
   Category,
   MessageTemplate,
   Recipient,
@@ -402,5 +403,85 @@ export function buildGroupPayload(
       message: message.text,
       ...(message.template?.media ? { mediaKey: message.template.id } : {}),
     })),
+  }
+}
+// ── Cooldown between successful campaigns (anti-ban guard) ────────────────────
+//
+// The clinic's WhatsApp number must not receive back-to-back campaign
+// dispatches: a sede that fired two campaigns minutes apart got the number
+// blocked (real incident, Oct 2026). The send screen shows an attention
+// modal when the last SUCCESSFUL campaign of the active branch is younger
+// than the floor below. Failed sends don't count — retrying a failure is
+// fine — and neither do demo (mock) sends.
+
+/** minimum wait between successful campaigns of the same sede (20 min). */
+export const CAMPAIGN_COOLDOWN_MS = 20 * 60_000
+/** From this size up, the last campaign was "big": recommended gap jumps to ~90 min. */
+export const BIG_CAMPAIGN_MIN = 16
+/** Recommended gap between campaigns when the last one was big (1.5 h), the /ayuda number. */
+export const BIG_CAMPAIGN_GAP_MS = 90 * 60_000
+
+export interface LastSuccessfulSend {
+  /** Epoch ms of the last successful (sent, non-mock) campaign in scope. */
+  at: number
+  /** Its enabledRecipients (messages actually dispatched). */
+  size: number
+}
+
+/**
+ * Latest successful send in scope. `branchScope` = only campaigns of one
+ * branch (send goes out with that branch's WhatsApp number) — pass null to
+ * consider everything (localStorage mode, single number).
+ */
+export function lastSuccessfulSend(
+  records: CampaignRecord[],
+  branchScope: number | null,
+): LastSuccessfulSend | null {
+  let best: LastSuccessfulSend | null = null
+  for (const r of records) {
+    if (r.mock) continue
+    if (r.status !== 'sent') continue
+    if (branchScope !== null && r.branchId !== branchScope) continue
+    const at = new Date(r.createdAt).getTime()
+    if (Number.isNaN(at)) continue
+    if (!best || at > best.at) {
+      best = { at, size: r.enabledRecipients }
+    }
+  }
+  return best
+}
+
+export interface CampaignCooldown {
+  /** True while the attention modal should fire on "Enviar campaña". */
+  within: boolean
+  /** Minutes since the last successful campaign in scope. */
+  sinceMinutes: number
+  /** Recommended gap in minutes given the size of that last campaign. */
+  recommendedMinutes: number
+  /** Human-relevant facts about the last campaign. */
+  lastAt: number
+  lastSize: number
+}
+
+/**
+ * Guard state for the send screen. Never null when a successful send exists
+ * in scope; consumers decide what to do from `within` + `recommendedMinutes`.
+ */
+export function campaignCooldown(
+  records: CampaignRecord[],
+  branchScope: number | null,
+  now: Date = new Date(),
+): CampaignCooldown | null {
+  const last = lastSuccessfulSend(records, branchScope)
+  if (!last) return null
+  return {
+    within: now.getTime() - last.at < CAMPAIGN_COOLDOWN_MS,
+    sinceMinutes: Math.max(0, Math.floor((now.getTime() - last.at) / 60_000)),
+    recommendedMinutes:
+      last.size >= BIG_CAMPAIGN_MIN
+        ? Math.round(BIG_CAMPAIGN_GAP_MS / 60_000)
+        : Math.round(CAMPAIGN_COOLDOWN_MS / 60_000),
+    lastAt: last.at,
+    lastSize: last.size,
   }
 }

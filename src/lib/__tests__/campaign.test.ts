@@ -1,9 +1,12 @@
 import { describe, expect, test } from 'vitest'
 import {
+  BIG_CAMPAIGN_MIN,
   buildGroupPayload,
   buildSendableGroups,
+  campaignCooldown,
   daysSince,
   defaultEnabledFor,
+  lastSuccessfulSend,
   normalizeCategoryName,
   pickTemplateBody,
   recentlyContactedFor,
@@ -498,5 +501,90 @@ describe('defaultEnabledFor with the contact ledger', () => {
         NOW,
       ),
     ).toBe(false)
+  })
+})
+
+// ── Campaign cooldown (anti-ban guard) ────────────────────────────────────────
+
+const mkRecord = (
+  over: Partial<import('../types').CampaignRecord> = {},
+): import('../types').CampaignRecord => ({
+  id: 'c1',
+  sentBy: 'u1',
+  totalRecipients: 5,
+  enabledRecipients: 5,
+  invalidRecipients: 0,
+  duplicateRecipients: 0,
+  payload: {},
+  status: 'sent',
+  errorMessage: null,
+  createdAt: new Date(2026, 9, 6, 10, 0).toISOString(),
+  ...over,
+})
+
+describe('lastSuccessfulSend', () => {
+  test('picks the latest sent non-mock campaign', () => {
+    const recs = [
+      mkRecord({ id: 'old', createdAt: new Date(2026, 9, 6, 9, 0).toISOString() }),
+      mkRecord({ id: 'mock', mock: true, createdAt: new Date(2026, 9, 6, 11, 0).toISOString() }),
+      mkRecord({ id: 'failed', status: 'failed', createdAt: new Date(2026, 9, 6, 12, 0).toISOString() }),
+      mkRecord({ id: 'new', createdAt: new Date(2026, 9, 6, 10, 30).toISOString() }),
+    ]
+    expect(lastSuccessfulSend(recs, null)?.at).toBe(
+      new Date(2026, 9, 6, 10, 30).getTime(),
+    )
+  })
+
+  test('branch scope ignores other branches; null scope considers all', () => {
+    const recs = [
+      mkRecord({ id: 'a', branchId: 1, createdAt: new Date(2026, 9, 6, 12, 0).toISOString() }),
+      mkRecord({ id: 'b', branchId: 2, createdAt: new Date(2026, 9, 6, 10, 0).toISOString() }),
+    ]
+    expect(lastSuccessfulSend(recs, 1)?.at).toBe(new Date(2026, 9, 6, 12, 0).getTime())
+    expect(lastSuccessfulSend(recs, 2)?.at).toBe(new Date(2026, 9, 6, 10, 0).getTime())
+    expect(lastSuccessfulSend(recs, null)?.at).toBe(new Date(2026, 9, 6, 12, 0).getTime())
+  })
+
+  test('returns null with no candidates', () => {
+    expect(lastSuccessfulSend([], null)).toBeNull()
+    expect(lastSuccessfulSend([mkRecord({ status: 'failed' })], null)).toBeNull()
+    expect(lastSuccessfulSend([mkRecord({ mock: true })], null)).toBeNull()
+  })
+})
+
+describe('campaignCooldown', () => {
+  const now = new Date(2026, 9, 6, 11, 0)
+
+  test('within the 20-min floor for a recent small campaign', () => {
+    const recs = [
+      mkRecord({ createdAt: new Date(2026, 9, 6, 10, 50).toISOString(), enabledRecipients: 8 }),
+    ]
+    const cd = campaignCooldown(recs, null, now)!
+    expect(cd.within).toBe(true)
+    expect(cd.sinceMinutes).toBe(10)
+    expect(cd.lastSize).toBe(8)
+    expect(cd.recommendedMinutes).toBe(20)
+  })
+
+  test('outside the floor when the gap exceeds 20 min', () => {
+    const recs = [
+      mkRecord({ createdAt: new Date(2026, 9, 6, 10, 30).toISOString() }),
+    ]
+    expect(campaignCooldown(recs, null, now)!.within).toBe(false)
+  })
+
+  test('big campaign recommends the 90-min gap', () => {
+    const recs = [
+      mkRecord({
+        createdAt: new Date(2026, 9, 6, 10, 40).toISOString(),
+        enabledRecipients: BIG_CAMPAIGN_MIN,
+      }),
+    ]
+    const cd = campaignCooldown(recs, null, now)!
+    expect(cd.recommendedMinutes).toBe(90)
+  })
+
+  test('null when nothing successful exists in scope', () => {
+    expect(campaignCooldown([mkRecord({ status: 'failed' })], null, now)).toBeNull()
   })
 })
